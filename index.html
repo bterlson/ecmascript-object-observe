@@ -3,7 +3,7 @@
 <title>Object.observe</title>
 <link rel="stylesheet" href="elements.css">
 </head><body><h1>Object.Observe</h1>
-<div><h2>Table of Contents</h2><ol class="toc"><li><a href="#intro"><span class="secnum"></span> Introduction</a><ol class="toc"><li><a href="#problem"><span class="secnum"></span> Problem</a></li><li><a href="#goals"><span class="secnum"></span> Goals</a></li><li><a href="#solution"><span class="secnum"></span> Solution</a></li><li><a href="#concerns"><span class="secnum"></span> Cross-cutting Concerns and Potential Implementation Challenges</a></li></ol></li><li><a href="#examples"><span class="secnum"></span> Examples</a><ol class="toc"><li><a href="#examples-basic"><span class="secnum"></span> Basic</a></li><li><a href="#examples-array"><span class="secnum"></span> Array</a></li><li><a href="#examples-synthetic"><span class="secnum"></span> Synthetic Change Records</a></li><li><a href="#examples-higher-synthetic"><span class="secnum"></span> Higher-level Change Records</a></li></ol></li><li><a href="#key-algorithms-and-semantics"><span class="secnum">1</span> Key Algorithms and Semantics</a><ol class="toc"><li><a href="#ChangeObserver-and-PendingChangeRecords"><span class="secnum">1.1</span> ChangeObserver and PendingChangeRecords</a></li><li><a href="#observable-changes-to-objects"><span class="secnum">1.2</span> Observable changes to objects</a></li><li><a href="#the-notifier-object"><span class="secnum">1.3</span> The Notifier Object</a></li><li><a href="#accepted-change-types"><span class="secnum">1.4</span> Accepted Change Types</a></li><li><a href="#ActiveChanges"><span class="secnum">1.5</span> ActiveChanges and higher-level change types</a></li><li><a href="#enqueuing-changes-to-observers"><span class="secnum">1.6</span> Enqueuing changes to observers</a></li><li><a href="#end-of-turn-delivery-of-change-records"><span class="secnum">1.7</span> End of turn delivery of change records</a></li></ol></li><li><a href="#new-internal-properties"><span class="secnum">2</span> New Internal Properties, Objects and Algorithms</a><ol class="toc"><li><a href="#observercallbacks"><span class="secnum">2.1</span> [[ObserverCallbacks]]</a></li><li><a href="#pendingchangerecords"><span class="secnum">2.2</span> [[PendingChangeRecords]]</a></li><li><a href="#notifier"><span class="secnum">2.3</span> [[Notifier]]</a></li><li><a href="#notifierobjects"><span class="secnum">2.4</span> Notifier Objects</a><ol class="toc"><li><a href="#notifierprototype"><span class="secnum">2.4.1</span> Properties of the Notifier Prototype</a><ol class="toc"><li><a href="#notifierprototype._notify"><span class="secnum">2.4.1.1</span> %NotifierPrototype%.notify(changeRecord)</a></li><li><a href="#notifierprototype_.performchange"><span class="secnum">2.4.1.2</span> %NotifierPrototype%.performChange(changeType, changeFn)</a></li></ol></li></ol></li><li><a href="#GetNotifier"><span class="secnum">2.5</span> GetNotifier(O)</a></li><li><a href="#BeginChange"><span class="secnum">2.6</span> BeginChange(O, changeType)</a></li><li><a href="#EndChange"><span class="secnum">2.7</span> EndChange(O, changeType)</a></li><li><a href="#ShouldDeliverToObserver"><span class="secnum">2.8</span> ShouldDeliverToObserver(activeChanges, acceptList, changeType)</a></li><li><a href="#EnqueueChangeRecord"><span class="secnum">2.9</span> EnqueueChangeRecord(O, changeRecord)</a></li><li><a href="#DeliverChangeRecords"><span class="secnum">2.10</span> DeliverChangeRecords(C)</a></li><li><a href="#DeliverAllChangeRecords"><span class="secnum">2.11</span> [[DeliverAllChangeRecords]]</a></li><li><a href="#CreateChangeRecord"><span class="secnum">2.12</span> CreateChangeRecord(type, object, name, oldDesc, newDesc)</a></li><li><a href="#CreateSpliceChangeRecord"><span class="secnum">2.13</span> [[CreateSpliceChangeRecord]]</a></li></ol></li><li><a href="#public-api-specification"><span class="secnum">3</span> Public API Specification</a><ol class="toc"><li><a href="#Object.observe"><span class="secnum">3.1</span> Object.observe(O, callback, accept = undefined)</a></li><li><a href="#Object.unobserve"><span class="secnum">3.2</span> Object.unobserve(O, callback)</a></li><li><a href="#Array.observe"><span class="secnum">3.3</span> Array.observe</a></li><li><a href="#Array.unobserve"><span class="secnum">3.4</span> Array.unobserve</a></li><li><a href="#Object.deliverChangeRecords"><span class="secnum">3.5</span> Object.deliverChangeRecords</a></li><li><a href="#Object.getNotifier"><span class="secnum">3.6</span> Object.getNotifier</a></li></ol></li><li><a href="#updates"><span class="secnum">A</span> Updates</a></li></ol></div><emu-intro id="intro">
+<div><h2>Table of Contents</h2><ol class="toc"><li><a href="#intro"><span class="secnum"></span> Introduction</a><ol class="toc"><li><a href="#problem"><span class="secnum"></span> Problem</a></li><li><a href="#goals"><span class="secnum"></span> Goals</a></li><li><a href="#solution"><span class="secnum"></span> Solution</a></li><li><a href="#concerns"><span class="secnum"></span> Cross-cutting Concerns and Potential Implementation Challenges</a></li></ol></li><li><a href="#examples"><span class="secnum"></span> Examples</a><ol class="toc"><li><a href="#examples-basic"><span class="secnum"></span> Basic</a></li><li><a href="#examples-array"><span class="secnum"></span> Array</a></li><li><a href="#examples-synthetic"><span class="secnum"></span> Synthetic Change Records</a></li><li><a href="#examples-higher-synthetic"><span class="secnum"></span> Higher-level Change Records</a></li></ol></li><li><a href="#key-algorithms-and-semantics"><span class="secnum">1</span> Key Algorithms and Semantics</a><ol class="toc"><li><a href="#ChangeObserver-and-PendingChangeRecords"><span class="secnum">1.1</span> ChangeObserver and PendingChangeRecords</a></li><li><a href="#observable-changes-to-objects"><span class="secnum">1.2</span> Observable changes to objects</a></li><li><a href="#the-notifier-object"><span class="secnum">1.3</span> The Notifier Object</a></li><li><a href="#accepted-change-types"><span class="secnum">1.4</span> Accepted Change Types</a></li><li><a href="#ActiveChanges"><span class="secnum">1.5</span> ActiveChanges and higher-level change types</a></li><li><a href="#enqueuing-changes-to-observers"><span class="secnum">1.6</span> Enqueuing changes to observers</a></li><li><a href="#end-of-turn-delivery-of-change-records"><span class="secnum">1.7</span> End of turn delivery of change records</a></li></ol></li><li><a href="#new-internal-properties"><span class="secnum">2</span> New Internal Properties, Objects and Algorithms</a><ol class="toc"><li><a href="#observercallbacks"><span class="secnum">2.1</span> [[ObserverCallbacks]]</a></li><li><a href="#pendingchangerecords"><span class="secnum">2.2</span> [[PendingChangeRecords]]</a></li><li><a href="#notifier"><span class="secnum">2.3</span> [[Notifier]]</a></li><li><a href="#notifierobjects"><span class="secnum">2.4</span> Notifier Objects</a><ol class="toc"><li><a href="#notifierprototype"><span class="secnum">2.4.1</span> Properties of the Notifier Prototype</a><ol class="toc"><li><a href="#notifierprototype._notify"><span class="secnum">2.4.1.1</span> %NotifierPrototype%.notify(changeRecord)</a></li><li><a href="#notifierprototype_.performchange"><span class="secnum">2.4.1.2</span> %NotifierPrototype%.performChange(changeType, changeFn)</a></li></ol></li></ol></li><li><a href="#GetNotifier"><span class="secnum">2.5</span> GetNotifier(O)</a></li><li><a href="#BeginChange"><span class="secnum">2.6</span> BeginChange(O, changeType)</a></li><li><a href="#EndChange"><span class="secnum">2.7</span> EndChange(O, changeType)</a></li><li><a href="#ShouldDeliverToObserver"><span class="secnum">2.8</span> ShouldDeliverToObserver(activeChanges, acceptList, changeType)</a></li><li><a href="#EnqueueChangeRecord"><span class="secnum">2.9</span> EnqueueChangeRecord(O, changeRecord)</a></li><li><a href="#DeliverChangeRecords"><span class="secnum">2.10</span> DeliverChangeRecords(C)</a></li><li><a href="#DeliverAllChangeRecords"><span class="secnum">2.11</span> [[DeliverAllChangeRecords]]</a></li><li><a href="#CreateChangeRecord"><span class="secnum">2.12</span> CreateChangeRecord(type, object, name, oldDesc, newDesc)</a></li><li><a href="#CreateSpliceChangeRecord"><span class="secnum">2.13</span> [[CreateSpliceChangeRecord]]</a></li></ol></li><li><a href="#public-api-specification"><span class="secnum">3</span> Public API Specification</a><ol class="toc"><li><a href="#Object.observe"><span class="secnum">3.1</span> Object.observe(O, callback, accept = undefined)</a></li><li><a href="#Object.unobserve"><span class="secnum">3.2</span> Object.unobserve(O, callback)</a></li><li><a href="#Array.observe"><span class="secnum">3.3</span> Array.observe</a></li><li><a href="#Array.unobserve"><span class="secnum">3.4</span> Array.unobserve</a></li><li><a href="#Object.deliverChangeRecords"><span class="secnum">3.5</span> Object.deliverChangeRecords</a></li><li><a href="#Object.getNotifier"><span class="secnum">3.6</span> Object.getNotifier</a></li></ol></li><li><a href="#modifications"><span class="secnum">4</span> Modifications to existing internal algorithms</a><ol class="toc"><li><a href="#ValidateAndApplyPropertyDescriptor"><span class="secnum">4.1</span> 9.1.6.3 ValidateAndApplyPropertyDescriptor(O, P, extensible, Desc, current)</a></li><li><a href="#Delete"><span class="secnum">4.2</span> 9.1.10 [[Delete]] (P)</a></li><li><a href="#PreventExtensions"><span class="secnum">4.3</span> 9.1.4 [[PreventExtensions]] ()</a></li><li><a href="#SetPrototypeOf"><span class="secnum">4.4</span> 9.1.2 `[[SetPrototypeOf]] (V)`</a></li><li><a href="#Array-changes"><span class="secnum">4.5</span> Changes to Array methods</a><ol class="toc"><li><a href="#Array.prototype.pop"><span class="secnum">4.5.1</span> Array.prototype.pop</a></li><li><a href="#Array.prototype.push"><span class="secnum">4.5.2</span> Array.prototype.push</a></li><li><a href="#Array.prototype.shift"><span class="secnum">4.5.3</span> Array.prototype.shift</a></li><li><a href="#Array.prototype.splice"><span class="secnum">4.5.4</span> Array.prototype.splice</a></li><li><a href="#Array.prototype.unshift"><span class="secnum">4.5.5</span> Array.prototype.unshift</a></li></ol></li><li><a href="#Array-instance-changes"><span class="secnum">4.6</span> Array Exotic Objects</a><ol class="toc"><li><a href="#DefineOwnProperty"><span class="secnum">4.6.1</span> [[DefineOwnProperty]] (P, Desc)</a></li><li><a href="#ArraySetLength"><span class="secnum">4.6.2</span> ArraySetLength Abstract Operation</a></li></ol></li></ol></li><li><a href="#updates"><span class="secnum">A</span> Updates</a></li></ol></div><emu-intro id="intro">
   <h1><span class="secnum"></span>Introduction</h1>
 
   <emu-intro id="problem">
@@ -684,7 +684,7 @@ assertChangesAre(squareChanges, [
     <h1><span class="secnum">3.1</span>Object.observe(O, callback, accept = undefined)</h1>
     <p>When the <code>observe</code> method is called with arguments Object <var>O</var>, function <var>callback</var> and <var>accept</var> the following steps are taken:</p>
     <emu-alg><ol>
-  <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-ecmascript-data-types-and-values">Type</a>(<var>O</var>) is not Objectttt, throw a <emu-val>TypeError</emu-val> exception.</li>
+  <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-ecmascript-data-types-and-values">Type</a>(<var>O</var>) is not Object, throw a <emu-val>TypeError</emu-val> exception.</li>
   <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-iscallable">IsCallable</a>(<var>callback</var>) is <emu-val>false</emu-val>, throw a <emu-val>TypeError</emu-val> exception.</li>
   <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-testintegritylevel">TestIntegrityLevel</a>(<var>callback</var>, <code>"frozen"</code>) is <emu-val>true</emu-val>, throw a <emu-val>TypeError</emu-val> exception.</li>
   <li>If <var>accept</var> is <emu-val>undefined</emu-val>, then
@@ -701,16 +701,15 @@ assertChangesAre(squareChanges, [
       <li>Let <var>len</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tolength">ToLength</a>(<var>lenValue</var>).</li>
       <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(<var>len</var>).</li>
       <li>Let <var>nextIndex</var> be 0.</li>
-      <li>While <var>nextIndex</var>
-        &lt; <var>len</var>, repeat
-          <ol>
-            <li>Let <var>next</var> be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(<var>accept</var>, <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(<var>nextIndex</var>)).</li>
-            <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(<var>next</var>).</li>
-            <li>Let <var>nextString</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(<var>next</var>).</li>
-            <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(<var>nextString</var>).</li>
-            <li>Append <var>nextString</var> to <var>acceptList</var>.</li>
-            <li>Let <var>nextIndex</var> be <var>nextIndex</var> + 1.</li>
-          </ol>
+      <li>While <var>nextIndex</var> &lt; <var>len</var>, repeat
+        <ol>
+          <li>Let <var>next</var> be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(<var>accept</var>, <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(<var>nextIndex</var>)).</li>
+          <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(<var>next</var>).</li>
+          <li>Let <var>nextString</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(<var>next</var>).</li>
+          <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(<var>nextString</var>).</li>
+          <li>Append <var>nextString</var> to <var>acceptList</var>.</li>
+          <li>Let <var>nextIndex</var> be <var>nextIndex</var> + 1.</li>
+        </ol>
       </li>
     </ol>
   </li>
@@ -796,6 +795,951 @@ assertChangesAre(squareChanges, [
   </emu-clause>
 </emu-clause>
 
+<emu-clause id="modifications">
+  <h1><span class="secnum">4</span>Modifications to existing internal algorithms</h1>
+  <p>Modifications to existing algorithms are <ins>indicated like this</ins>.</p>
+
+  <emu-clause id="ValidateAndApplyPropertyDescriptor">
+    <h1><span class="secnum">4.1</span>9.1.6.3 ValidateAndApplyPropertyDescriptor(O, P, extensible, Desc, current)</h1>
+    <p>When the abstract operation ValidateAndApplyPropertyDescriptor is called with Object O, property key P, Boolean value extensible, and property descriptors Desc, and current the following steps are taken:</p>
+
+    <p>This algorithm contains steps that test various fields of the Property Descriptor Desc for specific values. The fields that are tested in this manner need not actually exist in Desc. If a field is absent then its value is considered to be false.</p>
+
+    <emu-note><span class="note">Note</span>If undefined is passed as the O argument only validation is performed and no object updates are performed.</emu-note>
+    <emu-alg><ol>
+  <li>Assert: If <var>O</var> is not <emu-val>undefined</emu-val> then <var>P</var> is a valid property key.</li>
+  <li>
+    <ins>Let <var>changeType</var> be a string, initially set to <code>"reconfigure"</code>.</ins>
+  </li>
+  <li>If <var>current</var> is <emu-val>undefined</emu-val>, then
+    <ol>
+      <li>If <var>extensible</var> is <emu-val>false</emu-val>, then return <emu-val>false</emu-val>.</li>
+      <li>Assert: <var>extensible</var> is <emu-val>true</emu-val>.</li>
+      <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-isgenericdescriptor">IsGenericDescriptor</a>(<var>Desc</var>) or <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-isdatadescriptor">IsDataDescriptor</a>(<var>Desc</var>) is <emu-val>true</emu-val>, then
+        <ol>
+          <li>If <var>O</var> is not <emu-val>undefined</emu-val>, then create an own data property named <var>P</var> of object <var>O</var> whose [[Value]], [[Writable]], [[Enumerable]] and [[Configurable]] attribute values are described by Desc. If the value of an attribute field of Desc is absent, the attribute of the newly created property is set to its default value.</li>
+        </ol>
+      </li>
+      <li>Else Desc must be an accessor Property Descriptor,
+        <ol>
+          <li>If O is not undefined, then create an own accessor property named P of object O whose [[Get]], [[Set]], [[Enumerable]] and [[Configurable]] attribute values are described by Desc. If the value of an attribute field of Desc is absent, the attribute of the newly created property is set to its default value.</li>
+        </ol>
+      </li>
+      <li>
+        <ins>Let <var>R</var> be <a href="#CreateChangeRecord">CreateChangeRecord</a>(<code>"add"</code>, <var>O</var>, <var>P</var>, <var>current</var>, <var>Desc</var>).</ins>
+      </li>
+      <li>
+        <ins>Call <a href="#EnqueueChangeRecord">EnqueueChangeRecord</a>(<var>O</var>, <var>R</var>).</ins>
+      </li>
+      <li>Return true.</li>
+    </ol>
+  </li>
+  <li>Return true, if every field in Desc is absent.</li>
+  <li>Return true, if every field in Desc also occurs in current and the value of every field in Desc is the same value as the corresponding field in current when compared using the SameValue algorithm.</li>
+  <li>If the [[Configurable]] field of current is false then
+    <ol>
+      <li>Return false, if the [[Configurable]] field of Desc is true.</li>
+      <li>Return false, if the [[Enumerable]] field of Desc is present and the [[Enumerable]] fields of current and Desc are the Boolean negation of each other.</li>
+    </ol>
+  </li>
+  <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-isgenericdescriptor">IsGenericDescriptor</a>(Desc) is true, then no further validation is required.</li>
+  <li>Else if <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-isdatadescriptor">IsDataDescriptor</a>(current) and <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-isdatadescriptor">IsDataDescriptor</a>(Desc) have different results, then
+    <ol>
+      <li>Return false, if the [[Configurable]] field of current is false.</li>
+      <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-isdatadescriptor">IsDataDescriptor</a>(current) is true, then
+        <ol>
+          <li>If O is not undefined, then convert the property named P of object O from a data property to an accessor property. Preserve the existing values of the converted property’s [[Configurable]] and [[Enumerable]] attributes and set the rest of the property’s attributes to their default values.</li>
+        </ol>
+      </li>
+      <li>Else,
+        <ol>
+          <li>If O is not undefined, then convert the property named P of object O from an accessor property to a data property. Preserve the existing values of the converted property’s [[Configurable]] and [[Enumerable]] attributes and set the rest of the property’s attributes to their default values.</li>
+        </ol>
+      </li>
+    </ol>
+  </li>
+  <li>Else if <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-isdatadescriptor">IsDataDescriptor</a>(current) and <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-isdatadescriptor">IsDataDescriptor</a>(Desc) are both true, then
+    <ol>
+      <li>If the [[Configurable]] field of current is false, then
+        <ol>
+          <li>Return false, if the [[Writable]] field of current is false and the [[Writable]] field of Desc is true.</li>
+          <li>If the [[Writable]] field of current is false, then
+            <ol>
+              <li>Return false, if the [[Value]] field of Desc is present and <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-samevalue">SameValue</a>(Desc.[[Value]], current.[[Value]]) is false.</li>
+            </ol>
+          </li>
+        </ol>
+      </li>
+      <li>else the [[Configurable]] field of current is true, so any change is acceptable.</li>
+      <li>
+        <ins>If [[Configurable]] is not in <var>Desc</var> or <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-samevalue">SameValue</a>(Desc.[[Configurable]], <var>current</var>.[[Configurable]]) is <emu-val>true</emu-val> and [[Enumerable]] is not in <var>Desc</var> or <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-samevalue">SameValue</a>(<var>Desc</var>.[[Enumerable]], <var>current</var>.[[Enumerable]]) is true and [[Writable]] is not in Desc or <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-samevalue">SameValue</a>(Desc.[[Writable]], <var>current</var>.[[Writable]]) is <emu-val>true</emu-val>, then</ins>
+        <ol>
+          <li>
+            <ins>Let <var>changeType</var> to be the string <code>"update"</code>.</ins>
+          </li>
+        </ol>
+      </li>
+    </ol>
+  </li>
+  <li>Else <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-isaccessordescriptor">IsAccessorDescriptor</a>(current) and <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-isaccessordescriptor">IsAccessorDescriptor</a>(Desc) are both true,
+    <ol>
+      <li>If the [[Configurable]] field of current is false, then
+        <ol>
+          <li>Return false, if the [[Set]] field of Desc is present and <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-samevalue">SameValue</a>(Desc.[[Set]], current.[[Set]]) is false.</li>
+          <li>Return false, if the [[Get]] field of Desc is present and <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-samevalue">SameValue</a>(Desc.[[Get]], current.[[Get]]) is false.</li>
+        </ol>
+      </li>
+    </ol>
+  </li>
+  <li>If O is not undefined, then
+    <ol>
+      <li>For each attribute field of Desc that is present, set the correspondingly named attribute of the property named P of object O to the value of the field.</li>
+    </ol>
+  </li>
+  <li>
+    <ins>Let <var>R</var> be <a href="#CreateChangeRecord">CreateChangeRecord</a>(<var>changeType</var>, <var>O</var>, <var>P</var>, <var>current</var>, <var>Desc</var>).</ins>
+  </li>
+  <li>
+    <ins>Call <a href="#EnqueueChangeRecord">EnqueueChangeRecord</a>(<var>O</var>, <var>R</var>).</ins>
+  </li>
+  <li>Return true.</li>
+</ol></emu-alg>
+  </emu-clause>
+
+  <emu-clause id="Delete">
+    <h1><span class="secnum">4.2</span>9.1.10 [[Delete]] (P)</h1>
+
+    <p>When the [[Delete]] internal method of <var>O</var> is called with property key <var>P</var> the following steps are taken:</p>
+
+    <emu-alg><ol>
+  <li>Assert: <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-ispropertykey">IsPropertyKey</a>(<var>P</var>) is <emu-val>true</emu-val>.</li>
+  <li>Let <var>desc</var> be the result of calling the [GetOwnProperty]] internal method of <var>O</var> with argument <var>P</var>.</li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(<var>desc</var>).</li>
+  <li>If <var>desc</var> is <emu-val>undefined</emu-val>, then return <emu-val>true</emu-val>.</li>
+  <li>
+    <ins>Let <var>notifier</var> be <a href="#GetNotifier">GetNotifier</a>(<var>O</var>).</ins>
+  </li>
+  <li>If <var>desc</var>.[[Configurable]] is <emu-val>true</emu-val>, then
+    <ol>
+      <li>Remove the own property with name <var>P</var> from <var>O</var>.</li>
+      <li>
+        <ins>Let <var>R</var> be <a href="#CreateChangeRecord">CreateChangeRecord</a>(<code>"delete"</code>, <var>O</var>, <var>P</var>, <var>desc</var>).</ins>
+      </li>
+      <li>
+        <ins>Call <a href="#EnqueueChangeRecord">EnqueueChangeRecord</a>(<var>O</var> and <var>R</var>).</ins>
+      </li>
+      <li>Return <emu-val>true</emu-val>.</li>
+    </ol>
+  </li>
+  <li>Return false.</li>
+</ol></emu-alg>
+  </emu-clause>
+
+  <emu-clause id="PreventExtensions">
+    <h1><span class="secnum">4.3</span>9.1.4 [[PreventExtensions]] ()</h1>
+
+    <p>When the [[PreventExtensions]] internal method of <var>O</var> is called the following steps are taken:</p>
+
+    <emu-alg><ol>
+  <li>
+    <ins>Let <var>wasExtensible</var> be the value of <var>O</var>'s [[Extensible]] internal slot.</ins>
+  </li>
+  <li>Set the value of the [[Extensible]] internal slot of <var>O</var> to <emu-val>false</emu-val>.</li>
+  <li>If <var>wasExtensible</var> is <emu-val>false</emu-val>, return <emu-val>true</emu-val>.</li>
+  <li>
+    <ins>Let <var>notifier</var> be <a href="#GetNotifier">GetNotifier</a>(<var>O</var>).</ins>
+  </li>
+  <li>
+    <ins>Let <var>R</var> be <a href="#CreateChangeRecord">CreateChangeRecord</a>(<code>"preventExtensions"</code>, <var>O</var>).</ins>
+  </li>
+  <li>
+    <ins>Call <a href="#EnqueueChangeRecord">EnqueueChangeRecord</a>(<var>O</var>, <var>R</var>).</ins>
+  </li>
+  <li>Return <emu-val>true</emu-val>.</li>
+</ol></emu-alg>
+  </emu-clause>
+
+  <emu-clause id="SetPrototypeOf">
+    <h1><span class="secnum">4.4</span>9.1.2 <code>[[SetPrototypeOf]] (V)</code>
+</h1>
+
+    <p>When the [[SetPrototypeOf]] internal method of <var>O</var> is called with argument <var>V</var> the following steps are taken:</p>
+
+    <emu-alg><ol>
+  <li>Assert: Either <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-ecmascript-data-types-and-values">Type</a>(<var>V</var>) is Object or <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-ecmascript-data-types-and-values">Type</a>(<var>V</var>) is Null.</li>
+  <li>Let <var>extensible</var> be the value of the [[Extensible]] internal slot of <var>O</var>.</li>
+  <li>Let <var>current</var> be the value of the [[Prototype]] internal slot of <var>O</var>.</li>
+  <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-samevalue">SameValue</a>(<var>V</var>, <var>current</var>), then return <emu-val>true</emu-val>.</li>
+  <li>If <var>extensible</var> is <emu-val>false</emu-val>, then return <emu-val>false</emu-val>.</li>
+  <li>If <var>V</var> is not <emu-val>null</emu-val>, then
+    <ol>
+      <li>Let <var>p</var> be <var>V</var>.</li>
+      <li>Repeat, while <var>p</var> is not <emu-val>null</emu-val>
+        <ol>
+          <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-samevalue">SameValue</a>(<var>p</var>, <var>O</var>) is <emu-val>true</emu-val>, then return <emu-val>false</emu-val>.</li>
+          <li>Let <var>nextp</var> be the result of calling the [[GetPrototypeOf]] internal method of <var>p</var> with no arguments.</li>
+          <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(<var>nextp</var>).</li>
+          <li>Let <var>p</var> be <var>nextp</var>.</li>
+        </ol>
+      </li>
+    </ol>
+  </li>
+  <li>Let <var>extensible</var> be the value of the [[Extensible]] internal slot of <var>O</var>.</li>
+  <li>If <var>extensible</var> is <emu-val>false</emu-val>, then
+    <ol>
+      <li>Let <var>current2</var> be the value of the [[Prototype]] internal slot of <var>O</var>.</li>
+      <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-samevalue">SameValue</a>(<var>V</var>, <var>current2</var>) is <emu-val>true</emu-val>, then return <emu-val>true</emu-val>.</li>
+      <li>Return <emu-val>false</emu-val>.</li>
+    </ol>
+  </li>
+  <li>Set the value of the [[Prototype]] internal slot of <var>O</var> to <var>V</var>.</li>
+  <li>
+    <ins>Let <var>notifier</var> be <a href="#GetNotifier">GetNotifier</a>(<var>O</var>).</ins>
+  </li>
+  <li>
+    <ins>Let <var>R</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-objectcreate">ObjectCreate</a>(%ObjectPrototype%).</ins>
+  </li>
+  <li>
+    <ins>Let <var>desc</var> be the PropertyDescriptor{[[Value]]: <code>"setPrototype"</code>, [[Writable]]: <emu-val>false</emu-val>, [[Enumerable]]: <emu-val>true</emu-val>, [[Configurable]]: <emu-val>false</emu-val>}.</ins>
+  </li>
+  <li>
+    <ins>Let <var>success</var> be the result of calling the [[DefineOwnProperty]] internal method of <var>R</var> passing <code>"type"</code> and <var>desc</var> as arguments.</ins>
+  </li>
+  <li>
+    <ins>Assert: <var>success</var> is <emu-val>true</emu-val>.</ins>
+  </li>
+  <li>
+    <ins>Let <var>desc</var> be the PropertyDescriptor{[[Value]]: <var>O</var>, [[Writable]]: <emu-val>false</emu-val>, [[Enumerable]]: <emu-val>true</emu-val>, [[Configurable]]: <emu-val>false</emu-val>}.</ins>
+  </li>
+  <li>
+    <ins>Let <var>success</var> be the result of calling the [[DefineOwnProperty]] internal method of <var>R</var> passing <code>"object"</code> and <var>desc</var> as arguments.</ins>
+  </li>
+  <li>
+    <ins>Assert: <var>success</var> is <emu-val>true</emu-val>.</ins>
+  </li>
+  <li>
+    <ins>Let <var>desc</var> be the PropertyDescriptor{[[Value]]: <var>current</var>, [[Writable]]: <emu-val>false</emu-val>, [[Enumerable]]: <emu-val>true</emu-val>, [[Configurable]]: <emu-val>false</emu-val>}.</ins>
+  </li>
+  <li>
+    <ins>Let <var>success</var> be the result of calling the [[DefineOwnProperty]] internal method of <var>R</var> passing <code>"oldValue"</code> and <var>desc</var> as arguments.</ins>
+  </li>
+  <li>
+    <ins>Assert: <var>success</var> is <emu-val>true</emu-val>.</ins>
+  </li>
+  <li>
+    <ins>Set the [[Extensible]] internal slot of <var>R</var> to <emu-val>false</emu-val>.</ins>
+  </li>
+  <li>
+    <ins>Call <a href="#EnqueueChangeRecord">EnqueueChangeRecord</a>(<var>O</var>, <var>R</var>).</ins>
+  </li>
+  <li>Return <emu-val>true</emu-val>.</li>
+</ol></emu-alg>
+  </emu-clause>
+  <emu-clause id="Array-changes">
+    <h1><span class="secnum">4.5</span>Changes to Array methods</h1>
+    <emu-clause id="Array.prototype.pop">
+      <h1><span class="secnum">4.5.1</span>Array.prototype.pop</h1>
+
+      <p>22.1.3.16 Array.prototype.pop ()</p>
+
+      <p>The last element of the array is removed from the array and returned.</p>
+
+      <emu-alg><ol>
+  <li>Let O be the result of calling ToObject passing the this value as the argument.</li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(O).</li>
+  <li>Let lenVal be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(O, <code>"length"</code>).</li>
+  <li>Let len be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-touint32">ToUint32</a>(lenVal).</li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(len).</li>
+  <li>If len is zero,
+    <ol>
+      <li>Let putStatus be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-put-o-p-v-throw">Put</a>(O, <code>"length"</code>, 0, true).</li>
+      <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(putStatus).</li>
+      <li>Return undefined.</li>
+    </ol>
+  </li>
+  <li>Else, len &gt; 0
+    <ol>
+      <li>Let newLen be len–1.</li>
+      <li>Let indx be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(newLen).</li>
+      <li>
+        <ins>Call the [[BeginChange]] internal passing O and <code>"splice"</code>.</ins>
+      </li>
+      <li>Let element be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(O, indx).</li>
+      <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(element).</li>
+      <li>Let deleteStatus be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-deletepropertyorthrow">DeletePropertyOrThrow</a>(O, indx).</li>
+      <li>
+        <ins>If deleteStatus.[[type]] is normal, let putStatus be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-put-o-p-v-throw">Put</a>(O, <code>"length"</code>, newLen, true).</ins>
+      </li>
+      <li>
+        <ins>Call the [[EndChange]] internal passing O and <code>"splice"</code>.</ins>
+      </li>
+      <li>
+        <ins>Let elements be a new List.</ins>
+      </li>
+      <li>
+        <ins>Append element to the end of elements.</ins>
+      </li>
+      <li>
+        <ins>Let removed be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-createarrayfromlist">CreateArrayFromList</a>(elements).</ins>
+      </li>
+      <li>
+        <ins>Let R be the result of calling [[CreateSpliceChangeRecord]] with arguments: O, newLen, removed and 0.</ins>
+      </li>
+      <li>
+        <ins>Call [[EnqueueChangeRecord]] passing O and R</ins>
+      </li>
+      <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(deleteStatus)</li>
+      <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(putStatus)</li>
+      <li>Return element.</li>
+    </ol>
+  </li>
+</ol></emu-alg>
+    </emu-clause>
+    <emu-clause id="Array.prototype.push">
+      <h1><span class="secnum">4.5.2</span>Array.prototype.push</h1>
+
+      <p>22.1.3.17 Array.prototype.push ( [ item1 [ , item2 [ , … ] ] ] )</p>
+
+      <p>The arguments are appended to the end of the array, in the order in which they appear. The new length of the array is returned as the result of the call.</p>
+
+      <p>When the push method is called with zero or more arguments item1, item2, etc., the following steps are taken:</p>
+
+      <emu-alg><ol>
+  <li>Let O be the result of calling ToObject passing the this value as the argument.</li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(O).</li>
+  <li>Let lenVal be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(O, <code>"length"</code>).</li>
+  <li>Let n be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tolength">ToLength</a>(lenVal).</li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(n).</li>
+  <li>
+    <ins>Let putStatus be n.</ins>
+  </li>
+  <li>Let items be an internal List whose elements are, in left to right order, the arguments that were passed to this function invocation.</li>
+  <li>
+    <ins>Let <var>numAdded</var> be the length of the <var>items</var> list.</ins>
+  </li>
+  <li>
+    <ins>Call the [[BeginChange]] internal method passing O and <code>"splice"</code>.</ins>
+  </li>
+  <li>
+    <ins>Repeat, while items is not empty and status.[[type]] is normal</ins>
+    <ol>
+      <li>Remove the first element from items and let E be the value of the element.</li>
+      <li>Let putStatus be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-put-o-p-v-throw">Put</a>(O, <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(n), E, true).</li>
+      <li>
+        <ins>If putStatus.[[type]] is normal, increase n by 1.</ins>
+      </li>
+    </ol>
+  </li>
+  <li>
+    <ins>If putStatus.[[type]] is normal, let putStatus be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-put-o-p-v-throw">Put</a>(O, <code>"length"</code>, n, true).</ins>
+  </li>
+  <li>
+    <ins>Call the [[EndChange]] internal method passing O and <code>"splice"</code>.</ins>
+  </li>
+  <li>
+    <ins>Let removed be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-arraycreate">ArrayCreate</a>(0).</ins>
+  </li>
+  <li>
+    <ins>Let R be the result of calling [[CreateSpliceChangeRecord]] with arguments: O, lenVal, removed and numAdded.</ins>
+  </li>
+  <li>
+    <ins>Call [[EnqueueChangeRecord]] passing O and R</ins>
+  </li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(putStatus)</li>
+  <li>Return n.</li>
+</ol></emu-alg>
+    </emu-clause>
+
+    <emu-clause id="Array.prototype.shift">
+      <h1><span class="secnum">4.5.3</span>Array.prototype.shift</h1>
+
+      <p>22.1.3.21 Array.prototype.shift ( )</p>
+
+      <p>The first element of the array is removed from the array and returned.</p>
+      <emu-alg><ol>
+  <li>Let O be the result of calling ToObject passing the this value as the argument.</li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(O).</li>
+  <li>Let lenVal be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(O, <code>"length"</code>).</li>
+  <li>Let len be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tolength">ToLength</a>(lenVal).</li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(len).</li>
+  <li>If len is zero, then
+    <ol>
+      <li>Let putStatus be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-put-o-p-v-throw">Put</a>(O, <code>"length"</code>, 0, true).</li>
+      <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(putStatus).</li>
+      <li>Return undefined.</li>
+    </ol>
+  </li>
+  <li>
+    <ins>Call the [[BeginChange]] internal method passing O and <code>"splice"</code>.</ins>
+  </li>
+  <li>Let first be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(O, <code>"0"</code>).</li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(first).</li>
+  <li>
+    <ins>Let status be first</ins>
+  </li>
+  <li>Let k be 1.</li>
+  <li>
+    <ins>Repeat, while status.[[type]] is normal and k &lt; len</ins>
+    <ol>
+      <li>Let from be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(k).</li>
+      <li>Let to be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(k–1).</li>
+      <li>Let fromPresent be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-hasproperty">HasProperty</a>(O, from).</li>
+      <li>Let status be fromPresent.</li>
+      <li>
+        <ins>If status.[[type]] is normal</ins>
+        <ol>
+          <li>If fromPresent is true, then
+            <ol>
+              <li>Let fromVal be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(O, from).</li>
+              <li>
+                <ins>Let status be fromVal.</ins>
+              </li>
+              <li>
+                <ins>If status.[[type]] is normal, let putStatus be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-put-o-p-v-throw">Put</a>(O, to, fromVal, true).</ins>
+              </li>
+            </ol>
+          </li>
+          <li>Else, fromPresent is false
+            <ol>
+              <li>Let status be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-deletepropertyorthrow">DeletePropertyOrThrow</a>(O, to).</li>
+            </ol>
+          </li>
+          <li>Increase k by 1.</li>
+        </ol>
+      </li>
+    </ol>
+  </li>
+  <li>
+    <ins>If status.[[type]] is normal, let status be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-deletepropertyorthrow">DeletePropertyOrThrow</a>(O, <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(len–1)).</ins>
+  </li>
+  <li>
+    <ins>If status.[[type]] is normal, let status be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-put-o-p-v-throw">Put</a>(O, <code>"length"</code>, len–1, true).</ins>
+  </li>
+  <li>
+    <ins>Call the [[EndChange]] internal method passing O and <code>"splice"</code>.</ins>
+  </li>
+  <li>
+    <ins>Let elements be a new List.</ins>
+  </li>
+  <li>
+    <ins>Append first to the end of elements.</ins>
+  </li>
+  <li>
+    <ins>Let removed be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-createarrayfromlist">CreateArrayFromList</a>(elements).</ins>
+  </li>
+  <li>
+    <ins>Let R be the result of calling [[CreateSpliceChangeRecord]] with arguments: O, 0, removed and 0.</ins>
+  </li>
+  <li>
+    <ins>Call [[EnqueueChangeRecord]] passing O and R.</ins>
+  </li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(status).</li>
+  <li>Return first.</li>
+</ol></emu-alg>
+    </emu-clause>
+    <emu-clause id="Array.prototype.splice">
+      <h1><span class="secnum">4.5.4</span>Array.prototype.splice</h1>
+
+      <p>22.1.3.25 Array.prototype.splice (start, deleteCount [ , item1 [ , item2 [ , … ] ] ] )</p>
+
+      <p>When the splice method is called with two or more arguments start, deleteCount and (optionally) item1, item2, etc., the deleteCount elements of the array starting at array index start are replaced by the arguments item1, item2, etc. An Array object containing the deleted elements (if any) is returned. The following steps are taken:</p>
+
+      <emu-alg><ol>
+  <li>Let O be the result of calling ToObject passing the this value as the argument.</li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(O).</li>
+  <li>Let lenVal be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(O, <code>"length"</code>)</li>
+  <li>Let len be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tolength">ToLength</a>(lenVal).</li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(len).</li>
+  <li>Let relativeStart be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tointeger">ToInteger</a>(start).</li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(relativeStart).</li>
+  <li>If relativeStart is negative, let actualStart be max( (len + relativeStart), 0); else let actualStart be min(relativeStart, len).</li>
+  <li>If start is not present, then
+    <ol>
+      <li>Let actualDeleteCount be 0.</li>
+    </ol>
+  </li>
+  <li>Else if deleteCount is not present, then
+    <ol>
+      <li>Let actualDeleteCount be len - actualStart</li>
+    </ol>
+  </li>
+  <li>Else,
+    <ol>
+      <li>Let dc be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tointeger">ToInteger</a>(deleteCount).</li>
+      <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(dc).</li>
+      <li>Let actualDeleteCount be min(max(dc, 0), len - actualStart).</li>
+    </ol>
+  </li>
+  <li>Let A be undefined.</li>
+  <li>If O is an exotic Array object, then
+    <ol>
+      <li>Let C be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(O, <code>"constructor"</code>).</li>
+      <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(C).</li>
+      <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-isconstructor">IsConstructor</a>(C) is true, then
+        <ol>
+          <li>Let thisRealm be the running execution context's Realm.</li>
+          <li>If thisRealm and the value of C's [[Realm]] internal slot are the same value, then
+            <ol>
+              <li>Let A be the result of calling the [[Construct]] internal method of C with argument (actualDeleteCount).</li>
+            </ol>
+          </li>
+        </ol>
+      </li>
+    </ol>
+  </li>
+  <li>If A is undefined, then
+    <ol>
+      <li>Let A be the result of the abstract operation ArrayCreate with the argument actualDeleteCount.</li>
+    </ol>
+  </li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(A).</li>
+  <li>Let k be 0.</li>
+  <li>
+    <ins>Call the [[BeginChange]] internal method passing O and <code>"splice"</code>.</ins>
+  </li>
+  <li>
+    <ins>Let deletedItems be a new List.</ins>
+  </li>
+  <li>
+    <ins>Let status be relativeStart.</ins>
+  </li>
+  <li>
+    <ins>Repeat, while status.[[type]] is normal and k &lt; actualDeleteCount</ins>
+    <ol>
+      <li>Let from be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(actualStart+k).</li>
+      <li>Let fromPresent be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-hasproperty">HasProperty</a>(O, from).</li>
+      <li>
+        <ins>Let status be fromPresent.</ins>
+      </li>
+      <li>
+        <ins>If status.[[type]] is normal, then</ins>
+        <ol>
+          <li>If fromPresent is true, then
+            <ol>
+              <li>Let fromValue be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(O, from).</li>
+              <li>
+                <ins>Let status be fromValue.</ins>
+              </li>
+              <li>
+                <ins>If status.[[type]] is normal, then</ins>
+                <ol>
+                  <li>
+                    <ins>Let status be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-createdatapropertyorthrow">CreateDataPropertyOrThrow</a>(A, <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(k), fromValue).</ins>
+                  </li>
+                  <li>
+                    <ins>Append fromValue to the end of deletedItems.</ins>
+                  </li>
+                </ol>
+              </li>
+            </ol>
+          </li>
+          <li>Increment k by 1.</li>
+        </ol>
+      </li>
+    </ol>
+  </li>
+  <li>
+    <ins>If status.[[type]] is not throw, let status be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-put-o-p-v-throw">Put</a>(A, <code>"length"</code>, actualDeleteCount, true).</ins>
+  </li>
+  <li>
+    <ins>If status.[[type]] is not throw, then</ins>
+    <ol>
+      <li>Let items be an internal List whose elements are, in left to right order, the portion of the actual argument list starting with item1. The list will be empty if no such items are present.</li>
+      <li>Let itemCount be the number of elements in items.</li>
+    </ol>
+  </li>
+  <li>If status.[[type]] is not throw and itemCount &lt; actualDeleteCount, then
+    <ol>
+      <li>Let k be actualStart.</li>
+      <li>
+        <ins>Repeat, while status.[[type]] is normal and k &lt; (len – actualDeleteCount)</ins>
+        <ol>
+          <li>Let from be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(k+actualDeleteCount).</li>
+          <li>Let to be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(k+itemCount).</li>
+          <li>Let fromPresent be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-hasproperty">HasProperty</a>(O, from).</li>
+          <li>
+            <ins>Let status be fromPresent.</ins>
+          </li>
+          <li>
+            <ins>If status.[[type]] is normal, then</ins>
+            <ol>
+              <li>If fromPresent is true, then
+                <ol>
+                  <li>Let fromValue be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(O, from).</li>
+                  <li>
+                    <ins>Let status be fromValue.</ins>
+                  </li>
+                  <li>
+                    <ins>If status.[[type]] is normal, let status be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-put-o-p-v-throw">Put</a>(O, to, fromValue, true).</ins>
+                  </li>
+                </ol>
+              </li>
+              <li>Else, fromPresent is false
+                <ol>
+                  <li>Let status be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-deletepropertyorthrow">DeletePropertyOrThrow</a>(O, to).</li>
+                </ol>
+              </li>
+              <li>
+                <ins>If status.[[type]] is normal, Increase k by 1.</ins>
+              </li>
+            </ol>
+          </li>
+        </ol>
+      </li>
+      <li>
+        <ins>If status.[[type]] is normal, Let k be len.</ins>
+      </li>
+      <li>
+        <ins>Repeat, while status.[[type]] is normal and k &gt; (len – actualDeleteCount + itemCount)</ins>
+        <ol>
+          <li>Let status be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-deletepropertyorthrow">DeletePropertyOrThrow</a>(O, <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(k–1)).</li>
+          <li>
+            <ins>If status.[[type]] is normal, decrease k by 1.</ins>
+          </li>
+        </ol>
+      </li>
+    </ol>
+  </li>
+  <li>
+    <ins>Else if status.[[type]] is normal and itemCount &gt; actualDeleteCount, then</ins>
+    <ol>
+      <li>Let k be (len – actualDeleteCount).</li>
+      <li>
+        <ins>Repeat, while status.[[type]] is normal and k &gt; actualStart</ins>
+        <ol>
+          <li>Let from be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(k + actualDeleteCount – 1).</li>
+          <li>Let to be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(k + itemCount – 1)</li>
+          <li>Let fromPresent be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-hasproperty">HasProperty</a>(O, from).</li>
+          <li>
+            <ins>Let status be fromPresent.</ins>
+          </li>
+          <li>
+            <ins>If status.[[type]] is normal, then</ins>
+            <ol>
+              <li>If fromPresent is true, then
+                <ol>
+                  <li>Let fromValue be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(O, from).</li>
+                  <li>
+                    <ins>Let status be fromValue.</ins>
+                  </li>
+                  <li>
+                    <ins>If status.[[type]] is normal, let status be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-put-o-p-v-throw">Put</a>(O, to, fromValue, true).</ins>
+                  </li>
+                </ol>
+              </li>
+              <li>Else fromPresent is false,
+                <ol>
+                  <li>Let status be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-deletepropertyorthrow">DeletePropertyOrThrow</a>(O, to).</li>
+                </ol>
+              </li>
+              <li>
+                <ins>If status.[[type]] is normal, decrease k by 1.</ins>
+              </li>
+            </ol>
+          </li>
+        </ol>
+      </li>
+    </ol>
+  </li>
+  <li>
+    <ins>If status.[[type]] is normal, then</ins>
+    <ol>
+      <li>Let k be actualStart.</li>
+      <li>
+        <ins>Repeat, while status.[[type]] is normal and items is not empty</ins>
+        <ol>
+          <li>Remove the first element from items and let E be the value of that element.</li>
+          <li>Let status be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-put-o-p-v-throw">Put</a>(O, <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(k), E, true).</li>
+          <li>
+            <ins>If status.[[type]] is normal, increase k by 1.</ins>
+          </li>
+        </ol>
+      </li>
+      <li>Let status be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-put-o-p-v-throw">Put</a>(O, <code>"length"</code>, len – actualDeleteCount + itemCount, true).</li>
+    </ol>
+  </li>
+  <li>
+    <ins>Call the [[EndChange]] internal method passing O and <code>"splice"</code>.</ins>
+  </li>
+  <li>
+    <ins>Let removed be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-createarrayfromlist">CreateArrayFromList</a>(deletedItems).</ins>
+  </li>
+  <li>
+    <ins>Let R be the result of calling [[CreateSpliceChangeRecord]] with arguments: O, actualStart, removed and itemCount.</ins>
+  </li>
+  <li>
+    <ins>Call [[EnqueueChangeRecord]] passing O and R</ins>
+  </li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(status)</li>
+  <li>Return A.</li>
+</ol></emu-alg>
+    </emu-clause>
+    <emu-clause id="Array.prototype.unshift">
+      <h1><span class="secnum">4.5.5</span>Array.prototype.unshift</h1>
+
+      <p>22.1.3.28 Array.prototype.unshift ( [ item1 [ , item2 [ , … ] ] ] )</p>
+
+      <p>The arguments are prepended to the start of the array, such that their order within the array is the same as the order in which they appear in the argument list.</p>
+
+      <p>When the unshift method is called with zero or more arguments item1, item2, etc., the following steps are taken:</p>
+
+      <emu-alg><ol>
+  <li>Let O be the result of calling ToObject passing the this value as the argument.</li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(O).</li>
+  <li>Let lenVal be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(O, <code>"length"</code>)</li>
+  <li>Let len be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tolength">ToLength</a>(lenVal).</li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(len).</li>
+  <li>Let argCount be the number of actual arguments.</li>
+  <li>Let k be len.</li>
+  <li>
+    <ins>Let status be len.</ins>
+  </li>
+  <li>
+    <ins>Call the [[BeginChange]] internal method passing O and <code>"splice"</code>.</ins>
+  </li>
+  <li>
+    <ins>Repeat, while status.[[type]] is normal and k &gt; 0,</ins>
+    <ol>
+      <li>Let from be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(k–1).</li>
+      <li>Let to be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(k+argCount –1).</li>
+      <li>Let fromPresent be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-hasproperty">HasProperty</a>(O, from).</li>
+      <li>
+        <ins>Let status be fromPresent.</ins>
+      </li>
+      <li>
+        <ins>If status.[[type]] is normal, then</ins>
+        <ol>
+          <li>If fromPresent is true, then
+            <ol>
+              <li>Let fromValue be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(O, from).</li>
+              <li>
+                <ins>Let status be fromValue.</ins>
+              </li>
+              <li>
+                <ins>If status.[[type]] is normal, let putStatus be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-put-o-p-v-throw">Put</a>(O, to, fromValue, true).</ins>
+              </li>
+              <li>
+                <ins>Let status be putStatus.</ins>
+              </li>
+            </ol>
+          </li>
+          <li>Else, fromPresent is false
+            <ol>
+              <li>Let deleteStatus be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-deletepropertyorthrow">DeletePropertyOrThrow</a>(O, to).</li>
+              <li>
+                <ins>Let status be deleteStatus.</ins>
+              </li>
+            </ol>
+          </li>
+          <li>If status.[[type]] is not throw, decrease k by 1.</li>
+        </ol>
+      </li>
+    </ol>
+  </li>
+  <li>
+    <ins>If status.[[type]] is normal, then</ins>
+    <ol>
+      <li>Let j be 0.</li>
+      <li>Let items be a List whose elements are, in left to right order, the arguments that were passed to this function invocation.</li>
+    </ol>
+  </li>
+  <li>
+    <ins>Repeat, while status.[[type]] is normal and items is not empty</ins>
+    <ol>
+      <li>Remove the first element from items and let E be the value of that element.</li>
+      <li>Let status be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-put-o-p-v-throw">Put</a>(O, <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(j), E, true).</li>
+      <li>
+        <ins>If status.[[type]] is normal, increase j by 1.</ins>
+      </li>
+    </ol>
+  </li>
+  <li>Let status be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-put-o-p-v-throw">Put</a>(O, <code>"length"</code>, len+argCount, true).</li>
+  <li>
+    <ins>Call the [[EndChange]] internal method passing O and <code>"splice"</code>.</ins>
+  </li>
+  <li>
+    <ins>Let removed be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-arraycreate">ArrayCreate</a>(0).</ins>
+  </li>
+  <li>
+    <ins>Let R be the result of calling [[CreateSpliceChangeRecord]] with arguments: O, 0, removed and argCount.</ins>
+  </li>
+  <li>
+    <ins>Call [[EnqueueChangeRecord]] passing O and R.</ins>
+  </li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(status)</li>
+  <li>Return len+argCount.</li>
+</ol></emu-alg>
+    </emu-clause>
+  </emu-clause>
+  <emu-clause id="Array-instance-changes">
+    <h1><span class="secnum">4.6</span>Array Exotic Objects</h1>
+
+    <emu-clause id="DefineOwnProperty">
+      <h1><span class="secnum">4.6.1</span>[[DefineOwnProperty]] (P, Desc)</h1>
+
+      <p>9.4.2.1 [[DefineOwnProperty]] (P, Desc)</p>
+
+      <p>When the [[DefineOwnProperty]] internal method of an exotic Array object A is called with property P, and Property Descriptor Desc the following steps are taken:</p>
+
+      <emu-alg><ol>
+  <li>Assert: <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-ispropertykey">IsPropertyKey</a>(P) is true.</li>
+  <li>If P is <code>"length"</code>, then
+    <ol>
+      <li>Return the result of calling ArraySetLength with arguments A, and Desc.</li>
+    </ol>
+  </li>
+  <li>Else if P is an array index, then
+    <ol>
+      <li>Let oldLenDesc be the result of calling the [[GetOwnProperty]] internal method of A passing <code>"length"</code> as the argument. The result will never be undefined or an accessor descriptor because Array objects are created with a length data property that cannot be deleted or reconfigured.</li>
+      <li>Let oldLen be oldLenDesc.[[Value]].</li>
+      <li>Let index be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-touint32">ToUint32</a>(P).</li>
+      <li>Assert: index will never be an abrupt completion.</li>
+      <li>If index ≥ oldLen and oldLenDesc.[[Writable]] is false, then return false.</li>
+      <li>Let succeeded be the result of calling OrdinaryDefineOwnProperty passing A, P, and Desc as arguments.</li>
+      <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(succeeded).</li>
+      <li>If succeeded is false, then return false.</li>
+      <li>If index ≥ oldLen
+        <ol>
+          <li>Set oldLenDesc.[[Value]] to index + 1.</li>
+          <li>Let succeeded be the result of calling OrdinaryDefineOwnProperty passing A, <code>"length"</code>, and oldLenDesc as arguments.</li>
+          <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(succeeded).</li>
+          <li>
+            <ins>Call the [[BeginChange]] internal method passing A and <code>"splice"</code>.</ins>
+          </li>
+          <li>
+            <ins>Call the [[EndChange]] internal method passing A and <code>"splice"</code>.</ins>
+          </li>
+          <li>
+            <ins>Let removed be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-arraycreate">ArrayCreate</a>(0).</ins>
+          </li>
+          <li>
+            <ins>Let R be the result of calling [[CreateSpliceChangeRecord]] with arguments: A, oldLen, removed and (index + 1 - oldLen).</ins>
+          </li>
+          <li>
+            <ins>Call [[EnqueueChangeRecord]] passing A and R</ins>
+          </li>
+        </ol>
+      </li>
+      <li>Return true.</li>
+    </ol>
+  </li>
+  <li>Return the result of calling OrdinaryDefineOwnProperty passing A, P, and Desc as arguments.</li>
+</ol></emu-alg>
+    </emu-clause>
+    <emu-clause id="ArraySetLength">
+      <h1><span class="secnum">4.6.2</span>ArraySetLength Abstract Operation</h1>
+
+      <p>9.4.2.2 ArraySetLength Abstract Operation</p>
+
+      <p>When the abstract operation ArraySetLength is called with an exotic Array object A, and Property Descriptor Desc the following steps are taken:</p>
+
+      <emu-alg><ol>
+  <li>If the [[Value]] field of Desc is absent, then
+    <ol>
+      <li>Return the result of calling OrdinaryDefineOwnProperty passing A, <code>"length"</code>, and Desc as arguments.</li>
+    </ol>
+  </li>
+  <li>Let newLenDesc be a copy of Desc.</li>
+  <li>Let newLen be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-touint32">ToUint32</a>(Desc.[[Value]]).</li>
+  <li>If newLen is not equal to <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tonumber">ToNumber</a>( Desc.[[Value]]), throw a RangeError exception.</li>
+  <li>Set newLenDesc.[[Value]] to newLen.</li>
+  <li>Let oldLenDesc be the result of calling the [[GetOwnProperty]] internal method of A passing <code>"length"</code> as the argument. The result will never be undefined or an accessor descriptor because Array objects are created with a length data property that cannot be deleted or reconfigured.</li>
+  <li>Let oldLen be oldLenDesc.[[Value]].</li>
+  <li>If newLen ≥oldLen, then
+    <ol>
+      <li>Return the result of calling OrdinaryDefineOwnProperty passing A, <code>"length"</code>, and newLenDesc as arguments.</li>
+    </ol>
+  </li>
+  <li>If oldLenDesc.[[Writable]] is false, then return false.</li>
+  <li>If newLenDesc.[[Writable]] is absent or has the value true, let newWritable be true.</li>
+  <li>Else,
+    <ol>
+      <li>Need to defer setting the [[Writable]] attribute to false in case any elements cannot be deleted.</li>
+      <li>Let newWritable be false.</li>
+      <li>Set newLenDesc.[[Writable]] to true.</li>
+    </ol>
+  </li>
+  <li>Let succeeded be the result of calling OrdinaryDefineOwnProperty passing A, <code>"length"</code>, and newLenDesc as arguments.</li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(succeeded).</li>
+  <li>If succeeded is false, return false.</li>
+  <li>
+    <ins>Call the [[BeginChange]] internal method passing A and <code>"splice"</code>.</ins>
+  </li>
+  <li>
+    <ins>Let removedList be a new List.</ins>
+  </li>
+  <li>
+    <ins>Let status be succeeded.</ins>
+  </li>
+  <li>
+    <ins>Let numAdded be newLen - oldLen.</ins>
+  </li>
+  <li>
+    <ins>If numAdded &lt; 0, then let numAdded be 0.</ins>
+  </li>
+  <li>
+    <ins>While status.[[type]] is normal and newLen &lt; oldLen repeat,</ins>
+    <ol>
+      <li>Set oldLen to oldLen – 1.</li>
+      <li>
+        <ins>Let oldValue be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(A, <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(oldLen)).</ins>
+      </li>
+      <li>
+        <ins>Let status be oldValue.</ins>
+      </li>
+      <li>
+        <ins>If status.[[type]] is normal, then</ins>
+        <ol>
+          <li>
+            <ins>Add oldValue to the front of removedList.</ins>
+          </li>
+          <li>Let deleteSucceeded be the result of calling the [[Delete]] internal method of A passing <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(oldLen).</li>
+          <li>
+            <ins>Let status be deleteSucceeded.</ins>
+          </li>
+          <li>If deleteSucceeded is false, then
+            <ol>
+              <li>Set newLenDesc.[[Value]] to oldLen+1.</li>
+              <li>If newWritable is false, set newLenDesc.[[Writable]] to false.</li>
+              <li>
+                <ins>Let status be the result of calling OrdinaryDefineOwnProperty passing A, <code>"length"</code>, and newLenDesc as arguments.</ins>
+              </li>
+              <li>
+                <ins>If status.[[type]] is normal, then</ins>
+                <ol>
+                  <li>Return false.</li>
+                </ol>
+              </li>
+            </ol>
+          </li>
+        </ol>
+      </li>
+    </ol>
+  </li>
+  <li>
+    <ins>If status.[[type]] is normal and newWritable is false, then</ins>
+    <ol>
+      <li>Call OrdinaryDefineOwnProperty passing A, <code>"length"</code>, and Property Descriptor{[[Writable]]: false} as arguments. This call will always return true.</li>
+    </ol>
+  </li>
+  <li>
+    <ins>Call the [[EndChange]] internal passing A and <code>"splice"</code>.</ins>
+  </li>
+  <li>
+    <ins>Let removed be the result of ArrayCreateFromList(removedList).</ins>
+  </li>
+  <li>
+    <ins>Let R be the result of calling [[CreateSpliceChangeRecord]] with arguments: A, newLen, removed and numAdded.</ins>
+  </li>
+  <li>
+    <ins>Call [[EnqueueChangeRecord]] passing A and R.</ins>
+  </li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(status)</li>
+  <li>Return true.</li>
+</ol></emu-alg>
+    </emu-clause>
+  </emu-clause>
+</emu-clause>
 
 <emu-annex id="updates">
   <h1><span class="secnum">A</span>Updates</h1>
