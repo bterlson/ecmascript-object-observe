@@ -6,6 +6,20 @@ body {
     color: #333;
 }
 
+a:link {
+    text-decoration: none;
+    color: #3333bb;
+}
+
+a:hover {
+    text-decoration: underline;
+    color: blue;
+}
+
+a:visited {
+    color: inherit;
+}
+
 code {
     font-weight: bold;
     font-family: Consolas, Monaco, monospace;
@@ -199,9 +213,9 @@ table.lightweight-table td, table.lightweight-table th {
 
 /* diff styles */
 ins {
-    background-color: #efe;
+    background-color: #e0f8e0;
     text-decoration: none;
-    border-bottom: 1px solid #060;
+    border-bottom: 1px solid #396;
 }
 
 del {
