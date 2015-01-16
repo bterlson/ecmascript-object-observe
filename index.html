@@ -1,0 +1,890 @@
+<!doctype html>
+<head><meta charset="utf8">
+<title>Object.observe</title>
+<link rel="stylesheet" href="elements.css">
+</head><body><h1>Object.Observe</h1>
+<div><h2>Table of Contents</h2><ol class="toc"><li><a href="#intro"><span class="secnum"></span> Introduction</a><ol class="toc"><li><a href="#problem"><span class="secnum"></span> Problem</a></li><li><a href="#goals"><span class="secnum"></span> Goals</a></li><li><a href="#solution"><span class="secnum"></span> Solution</a></li><li><a href="#concerns"><span class="secnum"></span> Cross-cutting Concerns and Potential Implementation Challenges</a></li></ol></li><li><a href="#examples"><span class="secnum"></span> Examples</a><ol class="toc"><li><a href="#examples-basic"><span class="secnum"></span> Basic</a></li><li><a href="#examples-array"><span class="secnum"></span> Array</a></li><li><a href="#examples-synthetic"><span class="secnum"></span> Synthetic Change Records</a></li><li><a href="#examples-higher-synthetic"><span class="secnum"></span> Higher-level Change Records</a></li></ol></li><li><a href="#key-algorithms-and-semantics"><span class="secnum">1</span> Key Algorithms and Semantics</a><ol class="toc"><li><a href="#ChangeObserver-and-PendingChangeRecords"><span class="secnum">1.1</span> ChangeObserver and PendingChangeRecords</a></li><li><a href="#observable-changes-to-objects"><span class="secnum">1.2</span> Observable changes to objects</a></li><li><a href="#the-notifier-object"><span class="secnum">1.3</span> The Notifier Object</a></li><li><a href="#accepted-change-types"><span class="secnum">1.4</span> Accepted Change Types</a></li><li><a href="#ActiveChanges"><span class="secnum">1.5</span> ActiveChanges and higher-level change types</a></li><li><a href="#enqueuing-changes-to-observers"><span class="secnum">1.6</span> Enqueuing changes to observers</a></li><li><a href="#end-of-turn-delivery-of-change-records"><span class="secnum">1.7</span> End of turn delivery of change records</a></li></ol></li><li><a href="#new-internal-properties"><span class="secnum">2</span> New Internal Properties, Objects and Algorithms</a><ol class="toc"><li><a href="#observercallbacks"><span class="secnum">2.1</span> [[ObserverCallbacks]]</a></li><li><a href="#pendingchangerecords"><span class="secnum">2.2</span> [[PendingChangeRecords]]</a></li><li><a href="#notifier"><span class="secnum">2.3</span> [[Notifier]]</a></li><li><a href="#notifierobjects"><span class="secnum">2.4</span> Notifier Objects</a><ol class="toc"><li><a href="#notifierprototype"><span class="secnum">2.4.1</span> Properties of the Notifier Prototype</a><ol class="toc"><li><a href="#notifierprototype._notify"><span class="secnum">2.4.1.1</span> %NotifierPrototype%.notify(changeRecord)</a></li><li><a href="#notifierprototype_.performchange"><span class="secnum">2.4.1.2</span> %NotifierPrototype%.performChange(changeType, changeFn)</a></li></ol></li></ol></li><li><a href="#GetNotifier"><span class="secnum">2.5</span> GetNotifier(O)</a></li><li><a href="#BeginChange"><span class="secnum">2.6</span> BeginChange(O, changeType)</a></li><li><a href="#EndChange"><span class="secnum">2.7</span> EndChange(O, changeType)</a></li><li><a href="#ShouldDeliverToObserver"><span class="secnum">2.8</span> ShouldDeliverToObserver(activeChanges, acceptList, changeType)</a></li><li><a href="#EnqueueChangeRecord"><span class="secnum">2.9</span> EnqueueChangeRecord(O, changeRecord)</a></li><li><a href="#DeliverChangeRecords"><span class="secnum">2.10</span> DeliverChangeRecords(C)</a></li><li><a href="#DeliverAllChangeRecords"><span class="secnum">2.11</span> [[DeliverAllChangeRecords]]</a></li><li><a href="#CreateChangeRecord"><span class="secnum">2.12</span> CreateChangeRecord(type, object, name, oldDesc, newDesc)</a></li><li><a href="#CreateSpliceChangeRecord"><span class="secnum">2.13</span> [[CreateSpliceChangeRecord]]</a></li></ol></li><li><a href="#public-api-specification"><span class="secnum">3</span> Public API Specification</a><ol class="toc"><li><a href="#Object.observe"><span class="secnum">3.1</span> Object.observe(O, callback, accept = undefined)</a></li><li><a href="#Object.unobserve"><span class="secnum">3.2</span> Object.unobserve(O, callback)</a></li><li><a href="#Array.observe"><span class="secnum">3.3</span> Array.observe</a></li><li><a href="#Array.unobserve"><span class="secnum">3.4</span> Array.unobserve</a></li><li><a href="#Object.deliverChangeRecords"><span class="secnum">3.5</span> Object.deliverChangeRecords</a></li><li><a href="#Object.getNotifier"><span class="secnum">3.6</span> Object.getNotifier</a></li></ol></li><li><a href="#updates"><span class="secnum">A</span> Updates</a></li></ol></div><emu-intro id="intro">
+  <h1><span class="secnum"></span>Introduction</h1>
+
+  <emu-intro id="problem">
+    <h1><span class="secnum"></span>Problem</h1>
+
+    <p>Declarative programming techniques provide leverage and power to developers. The web platform has pioneered many -- not the least of which is HTML. As the practice of application development evolves, it is important that primitives exist in the platform which allow developers to create and evolve robust declarative mechanisms independent of those provided directly by the platform.</p>
+
+    <p>A class of declarative mechanisms depends on discovering that ECMAScript values have changed. For example, UI frameworks often want to provide an ability to databind objects in a datamodel to UI elements. Likewise, domain objects, application logic and persistence strategies can often best be described in terms of constraints and relationships on data.</p>
+
+    <p>Today, ECMAScript code wishing to observe changes to objects typically either creates objects wrapping the real data or employs dirty-checking strategies for discovering changes. The first approach requires objects being observed to buy into the strategy, making the user model more complex and eroding composability of concerns. The second approach has poor algorithmic behavior, requiring work proportional to the number of objects observed to discover if any change has taken place. Both require increased working sets.</p>
+  </emu-intro>
+
+  <emu-intro id="goals">
+    <h1><span class="secnum"></span>Goals</h1>
+    <p>The desired characteristics of a solution are:</p>
+    <ul>
+      <li>No wrapper or proxy objects needed, providing memory efficiency and object identity
+      </li><li>Change notifications on add/delete of a property on an object
+      </li><li>Change notifications on modifications to property descriptor of properties on an object
+      </li><li>The ability for an object to manually indicate when an accessor property has changed
+      </li><li>Efficiently implementable in engines
+      </li><li>Simple, targeted, extension to current ES
+      </li><li>Asynchronous notification of changes, but allow synchronous fetching of changes pending delivery<p></p>
+    </li></ul>
+  </emu-intro>
+
+  <emu-intro id="solution">
+    <h1><span class="secnum"></span>Solution</h1>
+    <p>Object.observe allows for the direct observation of changes to ECMAScript objects. It allows an observer to receive a time-ordered sequence of change records which describe the set of changes which took place to the set of observed objects.</p>
+
+    <p>Changes to objects are directly observable and are described in terms of</p>
+
+    <ul>
+      <li>Changes in the value of data properties
+      </li><li>The addition, deletion, and reconfiguration of all properties visible via the reflection APIs
+      </li><li>Changes to the prototype and extensibility of the object itself.
+    </li></ul>
+
+    <p>A flexible system is provided via a <code>"notifier"</code> object associated with every observable object, which allows for:</p>
+
+    <ul>
+      <li>Decoupling an object's implementation from its observable API.
+      </li><li>Allowing an object to efficiently describe multiple lower-level changes as a single higher-level change.
+    </li></ul>
+
+    <p>Lastly, Array.observe allows for the efficient description of certain changes which may affect many index-valued properties as single <code>"splice"</code> change record.</p>
+  </emu-intro>
+
+  <emu-intro id="concerns">
+    <h1><span class="secnum"></span>Cross-cutting Concerns and Potential Implementation Challenges</h1>
+
+    <p>Object.observe is a relatively significant and cross-cutting feature, as it</p>
+
+    <ul>
+      <li>Affects the core object model of ECMAScript
+      </li><li>Makes previously unobservable behavior observable
+      </li><li>Requires changes to central algorithms (e.g. mutating the properties of an object)
+      </li><li>Must not allow for the creation of a side-channel of communication between otherwise isolated object graphs.
+    </li></ul>
+  </emu-intro>
+</emu-intro>
+<emu-intro id="examples">
+  <h1><span class="secnum"></span>Examples</h1>
+
+  <emu-intro id="examples-basic">
+    <h1><span class="secnum"></span>Basic</h1>
+    <pre>var records;
+function observer(recs) {
+  records = recs;
+}
+
+var obj = { id: 1 };
+Object.observe(obj, observer);
+
+obj.a = 'b';
+obj.id++;
+Object.defineProperty(obj, 'a', { enumerable: false });
+delete obj.a;
+Object.preventExtensions(obj);
+
+Object.deliverChangeRecords(observer);
+assertChangesAre(records, [
+  { object: obj, type: 'add', name: 'a' },
+  { object: obj, type: 'update', name: 'id', oldValue: 1 },
+  { object: obj, type: 'reconfigure', name: 'a' },
+  { object: obj, type: 'delete', name: 'a', oldValue: 'b' },
+  { object: obj, type: 'preventExtensions', }
+]);
+    </pre>
+  </emu-intro>
+
+  <emu-intro id="examples-array">
+    <h1><span class="secnum"></span>Array</h1>
+    <pre>var basicChanges;
+function basicObserver(recs) {
+  basicChanges = recs;
+}
+
+var arrayChanges;
+function arrayObserver(recs) {
+  arrayChanges = recs;
+}
+
+var array = [1, 2, 3];
+Object.observe(array, basicObserver);
+Array.observe(array, arrayObserver);
+
+array.push(4);
+array.splice(2, 2);
+array[5] = 'a';
+array.length = 0;
+
+Object.deliverChangeRecords(basicObserver);
+assertChangesAre(basicChanges, [
+  // push
+  { object: array, type: 'add', name: '3' },
+  { object: array, type: 'update', name: 'length', oldValue: 3 },
+  // splice
+  { object: array, type: 'delete', name: '3', oldValue: 4 },
+  { object: array, type: 'delete', name: '2', oldValue: 3 },
+  { object: array, type: 'update', name: 'length', oldValue: 4 },
+  // index assignment
+  { object: array, type: 'add', name: '5' },
+  { object: array, type: 'update', name: 'length', oldValue: 2 },
+  // length assignment
+  { object: array, type: 'delete', name: '5', oldValue: 'a' },
+  { object: array, type: 'delete', name: '1', oldValue: 2 },
+  { object: array, type: 'delete', name: '0', oldValue: 1 },
+  { object: array, type: 'update', name: 'length', oldValue: 6 },
+]);
+
+Object.deliverChangeRecords(arrayObserver);
+assertChangesAre(arrayChanges, [
+  // push
+  { object: array, type: 'splice', index: 3, removed: [], addedCount: 1 },
+  // splice
+  { object: array, type: 'splice', index: 2, removed: [3, 4], addedCount: 0 },
+  // index assignment
+  { object: array, type: 'splice', index: 2, removed: [], addedCount: 4 },
+  // length assignment
+  { object: array, type: 'splice', index: 0, removed: [1, 2,,,,'a'], addedCount: 0 },
+]);
+    </pre>
+  </emu-intro>
+
+  <emu-intro id="examples-synthetic">
+    <h1><span class="secnum"></span>Synthetic Change Records</h1>
+    <pre>function Circle(r) {
+  var radius = r;
+
+  var notifier = Object.getNotifier(this);
+  function notifyAreaAndRadius(radius) {
+    notifier.notify({
+      type: 'update',
+      name: 'radius',
+      oldValue: radius
+    })
+    notifier.notify({
+      type: 'update',
+      name: 'area',
+      oldValue: Math.pow(radius * Math.PI, 2)
+    });
+  }
+
+  Object.defineProperty(this, 'radius', {
+    get: function() {
+      return radius;
+    },
+    set: function(r) {
+      if (radius === r)
+        return;
+      notifyAreaAndRadius(radius);
+      radius = r;
+    }
+  });
+
+  Object.defineProperty(this, 'area', {
+    get: function() {
+      return Math.power(radius * Math.PI, 2);
+    },
+    set: function(a) {
+      r = Math.sqrt(a)/Math.PI;
+      notifyAreaAndRadius(radius);
+      radius = r;
+    }
+  });
+}
+
+var changes;
+function observer(recs) {
+  changes = recs;
+}
+
+var circle = new Circle(5);
+
+Object.observe(circle, observer);
+
+circle.radius = 10;
+circle.area = 100;
+
+Object.deliverChangeRecords(observer);
+assertChangesAre(changes, [
+  // 'radius' assignment
+  { object: circle, type: 'update', name: 'radius', oldValue: 5 },
+  { object: circle, type: 'update', name: 'area', oldValue: 246.74011002723395 },
+  // 'area' assignment
+  { object: circle, type: 'update', name: 'radius', oldValue: 10 },
+  { object: circle, type: 'update', name: 'area', oldValue: 986.9604401089358 },
+]);
+    </pre>
+  </emu-intro>
+  <emu-intro id="examples-higher-synthetic">
+    <h1><span class="secnum"></span>Higher-level Change Records</h1>
+    <pre>function Square(x, y, width, height) {
+  this.x = x;
+  this.y = y;
+  this.width = width;
+  this.height = height;
+}
+
+Square.prototype = {
+  scale: function(ratio) {
+    Object.getNotifier(this).performChange('scale', () =&gt; {
+      this.width *= ratio;
+      this.height *= ratio;
+      return {
+        ratio: ratio
+      };
+    });
+  },
+
+  translate: function(dx, dy) {
+    Object.getNotifier(this).performChange('translate', () =&gt; {
+      this.x += dx;
+      this.y += dy;
+      return {
+        dx: dx,
+        dy: dy
+      }
+    });
+  }
+}
+
+Square.observe = function(square, callback) {
+  return Object.observe(square, callback, ['update', 'translate', 'scale']);
+}
+
+var basicChanges;
+function basicObserver(recs) {
+  basicChanges = recs;
+}
+
+var squareChanges;
+function squareObserver(recs) {
+  squareChanges = recs;
+}
+
+var square = new Square(0, 0, 10, 10);
+
+Object.observe(square, basicObserver);
+Square.observe(square, squareObserver);
+
+square.translate(5, 5);
+square.x = -5;
+square.scale(2);
+
+Object.deliverChangeRecords(basicObserver);
+assertChangesAre(basicChanges, [
+  // translate
+  { object: square, type: 'update', name: 'x', oldValue: 0 },
+  { object: square, type: 'update', name: 'y', oldValue: 0 },
+  // assignment to 'x'
+  { object: square, type: 'update', name: 'x', oldValue: 5 },
+  // scale
+  { object: square, type: 'update', name: 'width', oldValue: 10 },
+  { object: square, type: 'update', name: 'height', oldValue: 10 },
+]);
+
+Object.deliverChangeRecords(squareObserver);
+assertChangesAre(squareChanges, [
+  // translate
+  { object: square, type: 'translate', dx: 5, dy: 5 },
+  // assignment to 'x'
+  { object: square, type: 'update', name: 'x', oldValue: 5 },
+  // scale
+  { object: square, type: 'scale', ratio: 2 },
+]);
+    </pre>
+  </emu-intro>
+</emu-intro>
+
+<emu-clause id="key-algorithms-and-semantics">
+  <h1><span class="secnum">1</span>Key Algorithms and Semantics</h1>
+
+  <emu-clause id="ChangeObserver-and-PendingChangeRecords">
+    <h1><span class="secnum">1.1</span>ChangeObserver and PendingChangeRecords</h1>
+    <p>Conceptually, at the heart of the EMCAScript observation mechanism is two structures:</p>
+    <ul>
+      <li><a href="#ChangeObservers">ChangeObservers</a>: the set of functions which are presently registered as observers of changes which take place to given object.
+      </li><li><a href="#PendingChangeRecords">PendingChangeRecords</a>: the sequence of change records which have been enqueued for delivery to the an observer, but not yet delivered.
+    </li></ul>
+    <p><a href="#Object.observe">Object.observe</a> enters a function into an object's associated set of ChangeObservers (while <a href="#Object.unobserve">Object.unobserve</a> removes it).</p>
+
+    <p>When a change takes place to object, a change record may be appended to the PendingChangeRecords of the functions which are registered in its associated ChangeObservers.</p>
+
+    <p>An observer will receive the changes, either asynchronously, at the end of the current turn, or synchronously, if it calls <a href="#Object.deliverChangeRecords">Object.deliverChangeRecords()</a> with itself as an argument. In either case, IFF the function has pending changes, it will be invoked with the contents of its PendingChangeRecords as the only argument.</p>
+  </emu-clause>
+
+  <emu-clause id="observable-changes-to-objects">
+    <h1><span class="secnum">1.2</span>Observable changes to objects</h1>
+
+    <p>The vocabulary of observable changes to objects hews close to the object model and reflective APIs of ECMAScript.</p>
+    <ul>
+      <li>When properties are <a href="#validateandapplypropertydescriptor">added or reconfigured</a> on an object, observers may receive change records of type: <code>"add"</code>, <code>"reconfigure"</code> respectively.
+      </li><li>When the <a href="#validateandapplypropertydescriptor">value of data properties change</a>, observers may receive <code>"update"</code> change records.
+      </li><li>When properties are <a href="#delete">deleted</a>, observers may receive records of type <code>"delete"</code>.
+      </li><li>When an object's <a href="#setprototypeof">prototype</a> or <a href="#preventextensions">extensibility</a> is changed, observers may receive <code>"setPrototype"</code>, or <code>"preventExtensions"</code> change records.
+      </li><li>When certain <a href="#changes_to_array_methods">mutations to Arrays</a> take place which may affect multiple index properties, observers may receive <code>"splice"</code> change records.
+      </li><li>The <a href="#notifierprototype_.notify">notify()</a> method of an object's associated <a href="#notifier">Notifier</a> may be used to cause observers to receive custom (<code>"synthetic"</code>) change records.
+    </li></ul>
+    <p>Change records are enqueued to observers via the internal <a href="#enqueuechangerecord">EnqueueChangeRecord</a> algorithm.</p>
+  </emu-clause>
+  
+  <emu-clause id="the-notifier-object">
+    <h1><span class="secnum">1.3</span>The Notifier Object</h1>
+    <p>Every object has an associated <a href="#Notifier">Notifier</a> object which can be retrieved via <a href="#Object.getNotifier">Object.getNotifier()</a> as long as the object is not frozen. The Notifier has internal properties which reference the object's associated set of observers (ChangeObservers) as well as the set of changes which are currently being performed on the object (ActiveChanges).</p>
+
+    <p>The Notifier has public API (notify() and performChange()) which can be used to deliver <code>"synthetic"</code> change records to observers and <a href="#examples-higher-synthetic">describe higher-level changes</a>.</p>
+  </emu-clause>
+
+  <emu-clause id="accepted-change-types">
+    <h1><span class="secnum">1.4</span>Accepted Change Types</h1>
+
+    <p>An observer must only receive change records whose type matches one provided in the accept list, which is passed as the (optional) third argument to <a href="#object.observe">Object.observe</a> (if the argument is not provided, the list defaults to the <code>"intrinsic"</code> set of change types).</p>
+
+    <p>An observation is conceptually a tuple: <observed object,="" observer="" function,="" accepted="" change="" types="">. Object.observe ensures that this tuple is represented as an observerRecord in the associated Notifier's ChangeObservers list.</observed></p>
+  </emu-clause>
+
+  <emu-clause id="ActiveChanges">
+    <h1><span class="secnum">1.5</span>ActiveChanges and higher-level change types</h1>
+
+    <p>The <a href="#notifierprototype_.performchange">performChange()</a> method of an object's associated Notifier provides a mechanism to describe a set of changes as a single (more compact) higher-level change type.</p>
+
+    <p>The set of change types being performed on an object is represented in the set of properties of the Notifier's <a href="#beginchange">BeginChange</a> before, and <a href="#endchange">EndChange</a> after invoking the provided changeFn function.</p>
+  </emu-clause>
+
+  <emu-clause id="enqueuing-changes-to-observers">
+    <h1><span class="secnum">1.6</span>Enqueuing changes to observers</h1>
+
+    <p>When a change is to be enqueued to an object's associated observers, the internal <a href="#enqueuechangerecord">EnqueueChangeRecord</a> algorithm tests whether each observer should receive the change by invoking <a href="#shoulddelivertoobserver">ShouldDeliverToObserver</a>.</p>
+
+    <p>ShouldDeliverToObserver returns true IFF an observer accepts the candidate change record's type, but accepts none of the change types currently being performed on the object (as represented in the ActiveChanges).</p>
+  </emu-clause>
+  <emu-clause id="end-of-turn-delivery-of-change-records">
+    <h1><span class="secnum">1.7</span>End of turn delivery of change records</h1>
+    <p>At the end of the current processing turn (or <code>"Microtask"</code>), <a href="#deliverallchangerecords">DeliverAllChangeRecords</a> is invoked, which continuously delivers pending change records to observers until there are none remaining.</p>
+
+    <p>The order in which observers are delivered to is maintained in the <a href="#observercallbacks">ObserverCallbacks</a> list. The first time a function is used as an observer by provided it as an argument to Object.observe, it is appended to the end of ObserverCallbacks.</p>
+
+    <p>Delivery takes place by repeatedly iterating front-to-back through ObserverCallbacks, <a href="#deliverchangerecords">delivering</a> to any observer who has pending change records, until no observer have pending change records.</p>
+  </emu-clause>
+</emu-clause>
+
+<emu-clause id="new-internal-properties">
+  <h1><span class="secnum">2</span>New Internal Properties, Objects and Algorithms</h1>
+
+  <emu-clause id="observercallbacks">
+    <h1><span class="secnum">2.1</span>[[ObserverCallbacks]]</h1>
+    <p>There is now an ordered list, [[ObserverCallbacks]] which is shared per event queue. It is initially empty.</p>
+
+    <emu-note><span class="note">Note</span>This list is used to provide a deterministic ordering in which callbacks are called.<p></p>
+  </emu-note></emu-clause>
+
+  <emu-clause id="pendingchangerecords">
+    <h1><span class="secnum">2.2</span>[[PendingChangeRecords]]</h1>
+    <p>Every function now has a [[PendingChangeRecords]] internal slot which is an ordered list of ChangeRecords. It is initially empty.</p>
+    <emu-note><span class="note">Note</span>This list gets populated with change records as the objects that this function is observing are mutated. It gets emptied when the change records are delivered.</emu-note>
+  </emu-clause>
+
+  <emu-clause id="notifier">
+    <h1><span class="secnum">2.3</span>[[Notifier]]</h1>
+    <p>Every object <var>O</var> now has a [[Notifier]] internal slot which is initially <emu-val>undefined</emu-val>.</p>
+    <emu-note><span class="note">Note</span>This gets lazily initialized to a notifier object which is an object with the %NotifierPrototype% as its [[Prototype]].</emu-note>
+  </emu-clause>
+  <emu-clause id="notifierobjects">
+    <h1><span class="secnum">2.4</span>Notifier Objects</h1>
+    <p>A Notifier Object is an object returned from <code>Object.getNotifier</code>. There is not a named constructor for Notifier Objects.</p>
+
+    <emu-clause id="notifierprototype">
+      <h1><span class="secnum">2.4.1</span>Properties of the Notifier Prototype</h1>
+      <p>All Notifier Objects inherit properties from the %NotifierPrototype% intrinsic object. The %NotifierPrototype% intrinsic object is an ordinary object and its [[Prototype]] internal slot is the %ObjectPrototype% intrinsic object (19.1.3). In addition, %NotifierPrototype% has the following properties:</p>
+
+      <emu-clause id="notifierprototype._notify">
+        <h1><span class="secnum">2.4.1.1</span>%NotifierPrototype%.notify(changeRecord)</h1>
+
+        <emu-alg><ol>
+  <li>Let <var>O</var> be the <emu-val>this</emu-val> value.</li>
+  <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-ecmascript-data-types-and-values">Type</a>(<var>O</var>) is not Object, throw a <emu-val>TypeError</emu-val> exception.</li>
+  <li>If <var>O</var> does not have a [[Target]] internal slot return.</li>
+  <li>Let <var>type</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(<var>changeRecord</var>, <code>"type"</code>).</li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(<var>type</var>).</li>
+  <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-ecmascript-data-types-and-values">Type</a>(<var>type</var>) is not string, throw a <emu-val>TypeError</emu-val> exception.</li>
+  <li>Let <var>target</var> be the value of <var>O</var>'s [[Target]] internal slot.</li>
+  <li>Let <var>newRecord</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-objectcreate">ObjectCreate</a>(%ObjectPrototype%).</li>
+  <li>Let <var>desc</var> be the PropertyDescriptor{[[Value]]: <var>target</var>, [[Writable]]: <emu-val>false</emu-val>, [[Enumerable]]: <emu-val>true</emu-val>, [[Configurable]]: <emu-val>false</emu-val>}.</li>
+  <li>Let <var>success</var> be the result of calling the [[DefineOwnProperty]] internal method of <var>newRecord</var> passing <code>"object"</code> and <var>desc</var> as arguments.</li>
+  <li>Assert: <var>success</var> is <emu-val>true</emu-val>.</li>
+  <li>Let <var>names</var> be the result of calling the [[Enumerate]] internal method of <var>changeRecord</var> with no arguments.</li>
+  <li>Repeat for each element <var>N</var> of <var>names</var> in List order,
+    <ol>
+      <li>If <var>N</var> is not <code>"object"</code>, then
+        <ol>
+          <li>Let <var>value</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(<var>changeRecord</var>, <var>N</var>).</li>
+          <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(<var>value</var>).</li>
+          <li>Let <var>desc</var> be the PropertyDescriptor{[[Value]]: <var>value</var>, [[Writable]]: <emu-val>false</emu-val>, [[Enumerable]]: <emu-val>true</emu-val>, [[Configurable]]: <emu-val>false</emu-val>}.</li>
+          <li>Let <var>success</var> be the result of calling the [[DefineOwnProperty]] internal method of <var>newRecord</var> passing <var>N</var> and <var>desc</var> as arguments.</li>
+          <li>Assert: <var>success</var> is <emu-val>true</emu-val>.</li>
+        </ol>
+      </li>
+    </ol>
+  </li>
+  <li>Set the value of the [[Extensible]] internal slot of <var>newRecord</var> to <emu-val>false</emu-val>.</li>
+  <li>Call <a href="#EnqueueChangeRecord">EnqueueChangeRecord</a>(<var>target</var>, <var>newRecord</var>).</li>
+</ol></emu-alg>
+      </emu-clause>
+
+      <emu-clause id="notifierprototype_.performchange">
+        <h1><span class="secnum">2.4.1.2</span>%NotifierPrototype%.performChange(changeType, changeFn)</h1>
+        <emu-alg><ol>
+  <li>Let <var>O</var> be the <emu-val>this</emu-val> value.</li>
+  <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-ecmascript-data-types-and-values">Type</a>(<var>O</var>) is not Object, throw a <emu-val>TypeError</emu-val> exception.</li>
+  <li>If <var>O</var> does not have a [[Target]] internal slot return.</li>
+  <li>1. Let <var>target</var> be the value of <var>O</var>'s [[Target]] internal slot.</li>
+  <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-ecmascript-data-types-and-values">Type</a>(<var>changeType</var>) is not string, throw a <emu-val>TypeError</emu-val> exception.</li>
+  <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-iscallable">IsCallable</a>(<var>changeFn</var>) is <emu-val>false</emu-val>, throw a <emu-val>TypeError</emu-val> exception.</li>
+  <li>Call <a href="#BeginChange">BeginChange</a>(<var>target</var>, <var>changeType</var>).</li>
+  <li>Let <var>changeRecord</var> be the result of calling the [[Call]] internal method of <var>changeFn</var>, with <emu-val>undefined</emu-val> as <var>thisArgument</var> and an empty List as <var>argumentsList</var>.</li>
+  <li>Call <a href="#EndChange">EndChange</a>(<var>target</var>, <var>changeType</var>).</li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(<var>changeRecord</var>).</li>
+  <li>Let <var>changeObservers</var> be the value of <var>O</var>'s [[ChangeObservers]] internal slot.</li>
+  <li>If <var>changeObservers</var> is empty, return.</li>
+  <li>Let <var>target</var> be the value of <var>O</var>'s [[Target]] internal slot.</li>
+  <li>Let <var>newRecord</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-objectcreate">ObjectCreate</a>(%ObjectPrototype%).</li>
+  <li>Let <var>desc</var> be the PropertyDescriptor{[[Value]]: <var>target</var>, [[Writable]]: <emu-val>false</emu-val>, [[Enumerable]]: <emu-val>true</emu-val>, [[Configurable]]: <emu-val>false</emu-val>}.</li>
+  <li>Let <var>success</var> be the result of calling the [[DefineOwnProperty]] internal method of <var>newRecord</var> passing <code>"object"</code> and <var>desc</var> as arguments.</li>
+  <li>Assert: <var>success</var> is <emu-val>true</emu-val>.</li>
+  <li>Let <var>desc</var> be the PropertyDescriptor{[[Value]]: <var>changeType</var>, [[Writable]]: <emu-val>false</emu-val>, [[Enumerable]]: <emu-val>true</emu-val>, [[Configurable]]: <emu-val>false</emu-val>}.</li>
+  <li>Let <var>success</var> be the result of calling the [[DefineOwnProperty]] internal method of <var>newRecord</var> passing <code>"type"</code> and <var>desc</var> as arguments.</li>
+  <li>Assert: <var>success</var> is <emu-val>true</emu-val>.</li>
+  <li>Let <var>names</var> be the result of calling the [[Enumerate]] internal method of <var>changeRecord</var> with no arguments.</li>
+  <li>Repeat for each element <var>N</var> of <var>names</var> in List order,
+    <ol>
+      <li>If <var>N</var> is not <code>"object"</code> and <var>N</var> is not <code>"type"</code>, then
+        <ol>
+          <li>Let <var>value</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(<var>changeRecord</var>, <var>N</var>).</li>
+          <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(<var>value</var>).</li>
+          <li>Let <var>desc</var> be the PropertyDescriptor{[[Value]]: <var>value</var>, [[Writable]]: <emu-val>false</emu-val>, [[Enumerable]]: <emu-val>true</emu-val>, [[Configurable]]: <emu-val>false</emu-val>}.</li>
+          <li>Let <var>success</var> be the result of calling the [[DefineOwnProperty]] internal method of <var>newRecord</var> passing <var>N</var> and <var>desc</var> as arguments.</li>
+          <li>Assert: <var>success</var> is <emu-val>true</emu-val>.</li>
+        </ol>
+      </li>
+    </ol>
+  </li>
+  <li>Set the value of the [[Extensible]] internal slot of <var>newRecord</var> to <emu-val>false</emu-val>.</li>
+  <li>Call <a href="#EnqueueChangeRecord">EnqueueChangeRecord</a>(<var>target</var>, <var>newRecord</var>).</li>
+</ol></emu-alg>
+      </emu-clause>
+    </emu-clause>
+  </emu-clause>
+  <emu-clause id="GetNotifier" aoid="GetNotifier">
+    <h1><span class="secnum">2.5</span>GetNotifier(O)</h1>
+    <p>When the abstract operation GetNotifier is called with Object <var>O</var> the following steps are taken:</p>
+    <emu-alg><ol>
+  <li>Let <var>notifier</var> be the value of <var>O</var>'s [[Notifier]] internal slot.</li>
+  <li>If <var>notifier</var> is <emu-val>undefined</emu-val>, then
+    <ol>
+      <li>Let <var>notifier</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-objectcreate">ObjectCreate</a>(%NotifierPrototype%, ([[Target]], [[ChangeObservers]], [[ActiveChanges]])).</li>
+      <li>Set <var>notifier</var>'s [[Target]] internal slot to <var>O</var>.</li>
+      <li>Set <var>notifier</var>'s [[ChangeObservers]] internal slot to a new empty List.</li>
+      <li>Set <var>notifier</var>'s [[ActiveChanges]] internal slot to <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-objectcreate">ObjectCreate</a>(<emu-val>null</emu-val>).</li>
+      <li>Set <var>O</var>'s [[Notifier]] internal slot to <var>notifier</var>.</li>
+    </ol>
+  </li>
+  <li>return <var>notifier</var>.</li>
+</ol></emu-alg>
+  </emu-clause>
+
+  <emu-clause id="BeginChange" aoid="BeginChange">
+    <h1><span class="secnum">2.6</span>BeginChange(O, changeType)</h1>
+    <p>When the abstract operation BeginChange is called with Object <var>O</var> and string <var>changeType</var> the following steps are taken:</p>
+    <emu-alg><ol>
+  <li>Assert: <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-ecmascript-data-types-and-values">Type</a>(<var>O</var>) is Object.</li>
+  <li>Assert: <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-ecmascript-data-types-and-values">Type</a>(<var>changeType</var>) is String.</li>
+  <li>Let <var>notifier</var> be <a href="#GetNotifier">GetNotifier</a>(<var>O</var>).</li>
+  <li>Let <var>activeChanges</var> be the value of <var>notifier</var>'s [[ActiveChanges]] internal slot.</li>
+  <li>Let <var>changeCount</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(<var>activeChanges</var>, <var>changeType</var>).</li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(<var>changeCount</var>).</li>
+  <li>If <var>changeCount</var> is <emu-val>undefined</emu-val>, let <var>changeCount</var> be 1.</li>
+  <li>Else, let <var>changeCount</var> be <var>changeCount</var> + 1.</li>
+  <li>Let <var>success</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-createdataproperty">CreateDataProperty</a>(<var>activeChanges</var>, <var>changeType</var>, <var>changeCount</var>).</li>
+  <li>Assert: <var>success</var> is <emu-val>true</emu-val>.</li>
+</ol></emu-alg>
+  </emu-clause>
+
+  <emu-clause id="EndChange" aoid="EndChange">
+    <h1><span class="secnum">2.7</span>EndChange(O, changeType)</h1>
+    <p>When the abstract operation EndChange is called with Object <var>O</var> and string <var>changeType</var> the following steps are taken:</p>
+    <emu-alg><ol>
+  <li>Assert: <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-ecmascript-data-types-and-values">Type</a>(<var>O</var>) is Object.</li>
+  <li>Assert: <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-ecmascript-data-types-and-values">Type</a>(<var>changeType</var>) is String.</li>
+  <li>Let <var>notifier</var> be <a href="#GetNotifier">GetNotifier</a>(<var>O</var>).</li>
+  <li>Let <var>activeChanges</var> be the value of <var>notifier</var>'s [[ActiveChanges]] internal slot.</li>
+  <li>Let <var>changeCount</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(<var>activeChanges</var>, <var>changeType</var>).</li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(<var>changeCount</var>).</li>
+  <li>Assert: <var>changeCount</var> &gt; 0.</li>
+  <li>Let <var>changeCount</var> be <var>changeCount</var> - 1.</li>
+  <li>Let <var>success</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-createdataproperty">CreateDataProperty</a>(<var>activeChanges</var>, <var>changeType</var>, <var>changeCount</var>).</li>
+  <li>Assert: <var>success</var> is <emu-val>true</emu-val>.</li>
+</ol></emu-alg>
+  </emu-clause>
+
+  <emu-clause id="ShouldDeliverToObserver" aoid="ShouldDeliverToObserver">
+    <h1><span class="secnum">2.8</span>ShouldDeliverToObserver(activeChanges, acceptList, changeType)</h1>
+
+    <p>When the abstract operation ShouldDeliverToObserver is called with Object <var>activeChanges</var>, List <var>acceptList</var> and string <var>changeType</var> the following steps are taken:</p>
+    <emu-alg><ol>
+  <li>Let <var>doesAccept</var> be <emu-val>false</emu-val>.</li>
+  <li>For each <var>accept</var> in <var>acceptList</var>, do
+    <ol>
+      <li>Let <var>activeChangeCount</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(<var>activeChanges</var>, <var>accept</var>).</li>
+      <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(<var>activeChangeCount</var>).</li>
+      <li>If <var>activeChangeCount</var> &gt; 0, return <emu-val>false</emu-val>.</li>
+      <li>If <var>accept</var> is same string as <var>changeType</var>, then
+        <ol>
+          <li>Let <var>doesAccept</var> be <emu-val>true</emu-val> .</li>
+        </ol>
+      </li>
+    </ol>
+  </li>
+  <li>return <var>doesAccept</var>.</li>
+</ol></emu-alg>
+  </emu-clause>
+
+  <emu-clause id="EnqueueChangeRecord" aoid="EnqueueChangeRecord">
+    <h1><span class="secnum">2.9</span>EnqueueChangeRecord(O, changeRecord)</h1>
+
+    <p>When the abstract operation EnqueueChangeRecord is called with Object <var>O</var> and change record <var>changeRecord</var> the following steps are taken:</p>
+    <emu-alg><ol>
+  <li>Assert: <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-ecmascript-data-types-and-values">Type</a>(<var>O</var>) is Object.</li>
+  <li>Let <var>notifier</var> be <a href="#GetNotifier">GetNotifier</a>(<var>O</var>).</li>
+  <li>Let <var>changeType</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(<var>changeRecord</var>, <code>"type"</code>).</li>
+  <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(<var>changeType</var>).</li>
+  <li>Let <var>activeChanges</var> be the value of <var>notfier</var>'s [[ActiveChanges]] internal slot.</li>
+  <li>Let <var>changeObservers</var> be the value of <var>notifier</var>'s [[ChangeObservers]] internal slot.</li>
+  <li>For each <var>observerRecord</var> in <var>changeObservers</var>, do
+    <ol>
+      <li>Let <var>acceptList</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(<var>observerRecord</var>, <code>"accept"</code>).</li>
+      <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(<var>acceptList</var>).</li>
+      <li>Let <var>deliver</var> be <a href="#ShouldDeliverToObserver">ShouldDeliverToObserver</a>(<var>activeChanges</var>, <var>acceptList</var>, <var>changeType</var>).</li>
+      <li>If <var>deliver</var> is <emu-val>false</emu-val>, continue.</li>
+      <li>Otherwise, let <var>observer</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(<var>observerRecord</var>, <code>"callback"</code>).</li>
+      <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(<var>observer</var>).</li>
+      <li>Let <var>pendingRecords</var> be the value of <var>observer</var>'s [[PendingChangeRecords]] internal slot.</li>
+      <li>Append <var>changeRecord</var> to the end of <var>pendingRecords</var>.</li>
+    </ol>
+  </li>
+</ol></emu-alg>
+  </emu-clause>
+
+
+  <emu-clause id="DeliverChangeRecords" aoid="DeliverChangeRecords">
+    <h1><span class="secnum">2.10</span>DeliverChangeRecords(C)</h1>
+
+    <p>When the abstract operation DeliverChangeRecords is called with callback <var>C</var>, the following steps are taken:</p>
+
+    <emu-alg><ol>
+  <li>Let <var>changeRecords</var> be the value of <var>C</var>'s [[PendingChangeRecords]] internal slot.</li>
+  <li>Set <var>C</var>'s [[PendingChangeRecords]] internal slot to a new empty List.</li>
+  <li>Let <var>array</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-arraycreate">ArrayCreate</a>(0).</li>
+  <li>Let <var>n</var> be 0.</li>
+  <li>For each <var>record</var> in <var>changeRecords</var>, do:
+    <ol>
+      <li>Let <var>status</var> be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-createdataproperty">CreateDataProperty</a>(<var>array</var>, <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(<var>n</var>), _record).</li>
+      <li>Assert: <var>status</var> is <emu-val>true</emu-val>.</li>
+      <li>Increment <var>n</var> by 1.</li>
+    </ol>
+  </li>
+  <li>If <var>array</var> is empty, return <emu-val>false</emu-val>.</li>
+  <li>Let <var>status</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-call-f-v-args">Call</a>(<var>C</var>, <emu-val>undefined</emu-val>, «<var>array</var>»).</li>
+  <li><var>result</var> is intentionall ignored here since. An implementation might choose to log abrubt completions here.</li>
+  <li>Return <emu-val>true</emu-val>.</li>
+</ol></emu-alg>
+
+    <emu-note><span class="note">Note</span>The user facing function ''Object.deliverChangeRecords'' returns <emu-val>''undefined''</emu-val> to prevent detection if anything was delivered or not.</emu-note>
+  </emu-clause>
+
+  <emu-clause id="DeliverAllChangeRecords" aoid="DeliverAllChangeRecords">
+    <h1><span class="secnum">2.11</span>[[DeliverAllChangeRecords]]</h1>
+    <p>There is an abstract [[DeliverAllChangeRecords]] internal algorithm:</p>
+
+    <p>?.??.?? [[DeliverAllChangeRecords]]</p>
+
+    <p>When the [[DeliverAllChangeRecords]] internal algorithm is called, the following steps are taken:</p>
+    <emu-alg><ol>
+  <li>Let <var>observers</var> be the result of getting [[ObserverCallbacks]]</li>
+  <li>Let <var>anyWorkDone</var> be false.</li>
+  <li>For each <var>observer</var> in <var>observers</var>, do:
+    <ol>
+      <li>Let <var>result</var> be the result of calling [[DeliverChangeRecords]] with <var>observer</var>.</li>
+      <li>If <var>result</var> is <emu-val>true</emu-val>, set <var>anyWorkDone</var> to <emu-val>true</emu-val>.</li>
+    </ol>
+  </li>
+  <li>Return <var>anyWorkDone</var>.</li>
+</ol></emu-alg>
+
+    <emu-note><span class="note">Note</span>It is the intention that the embedder will call this internal algorithm when it is time to deliver the change records.</emu-note>
+  </emu-clause>
+
+  <emu-clause id="CreateChangeRecord" aoid="CreateChangeRecord">
+    <h1><span class="secnum">2.12</span>CreateChangeRecord(type, object, name, oldDesc, newDesc)</h1>
+
+    <p>When the abstract operation CreateChangeRecord is called with string <var>type</var>, Object <var>object</var>, <var>name</var>, Object <var>oldDesc</var> and Object <var>newDesc</var> the following steps are taken:</p>
+    <emu-alg><ol>
+  <li>Let <var>changeRecord</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-objectcreate">ObjectCreate</a>(%ObjectPrototype%).</li>
+  <li>Let <var>desc</var> be the PropertyDescriptor{[[Value]]: <var>type</var>, [[Writable]]: <emu-val>false</emu-val>, [[Enumerable]]: <emu-val>true</emu-val>, [[Configurable]]: <emu-val>false</emu-val>}.</li>
+  <li>Let <var>success</var> be the result of calling the [[DefineOwnProperty]] internal method of <var>changeRecord</var> passing <code>"type"</code> and <var>desc</var> as arguments.</li>
+  <li>Assert: <var>success</var> is <emu-val>true</emu-val>.</li>
+  <li>Let <var>desc</var> be the PropertyDescriptor{[[Value]]: <var>object</var>, [[Writable]]: <emu-val>false</emu-val>, [[Enumerable]]: <emu-val>true</emu-val>, [[Configurable]]: <emu-val>false</emu-val>}.</li>
+  <li>Let <var>success</var> be the result of calling the [[DefineOwnProperty]] internal method of <var>changeRecord</var> passing <code>"object"</code> and <var>desc</var> as arguments.</li>
+  <li>Assert: <var>success</var> is <emu-val>true</emu-val>.</li>
+  <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-ispropertykey">IsPropertyKey</a>(<var>name</var>) is true, then
+    <ol>
+      <li>Let <var>desc</var> be the PropertyDescriptor{[[Value]]: <var>name</var>, [[Writable]]: <emu-val>false</emu-val>, [[Enumerable]]: <emu-val>true</emu-val>, [[Configurable]]: <emu-val>false</emu-val>}.</li>
+      <li>Let <var>success</var> be the result of calling the [[DefineOwnProperty]] internal method of <var>changeRecord</var> passing <code>"name"</code> and <var>desc</var> as arguments.</li>
+      <li>Assert: <var>success</var> is <emu-val>true</emu-val>.</li>
+    </ol>
+  </li>
+  <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-isdatadescriptor">IsDataDescriptor</a>(<var>oldDesc</var>) is <emu-val>true</emu-val>, then
+    <ol>
+      <li>If IsDataDescritor(<var>newDesc</var>) is <emu-val>false</emu-val> or <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-samevalue">SameValue</a>(<var>oldDesc</var>.[[Value]], <var>newDesc</var>.[[Value]]) is <emu-val>false</emu-val>, then
+        <ol>
+          <li>Let <var>desc</var> be the PropertyDescriptor{[[Value]]: <var>oldDesc</var>, [[Writable]]: <emu-val>false</emu-val>, [[Enumerable]]: <emu-val>true</emu-val>, [[Configurable]]: <emu-val>false</emu-val>}.</li>
+          <li>Let <var>success</var> be the result of calling the [[DefineOwnProperty]] internal method of <var>changeRecord</var> passing <code>"oldValue"</code> and <var>desc</var> as arguments.</li>
+          <li>Assert: <var>success</var> is <emu-val>true</emu-val>.</li>
+        </ol>
+      </li>
+    </ol>
+  </li>
+  <li>Set the value of the [[Extensible]] internal slot of <var>changeRecord</var> to <emu-val>false</emu-val>.</li>
+  <li>Return <var>changeRecord</var>.</li>
+</ol></emu-alg>
+  </emu-clause>
+
+  <emu-clause id="CreateSpliceChangeRecord" aoid="CreateSpliceChangeRecord">
+    <h1><span class="secnum">2.13</span>[[CreateSpliceChangeRecord]]</h1>
+
+    <p>There is now an abstract operation [[CreateSpliceChangeRecord]]:</p>
+
+    <p>?.??.?? [[CreateSpliceChangeRecord]] (object, index, removed, addedCount)</p>
+
+    <p>When the abstract operation CreateSpliceChangeRecord is called with the arguments: <var>object</var>, <var>index</var>, <var>removed</var>, and <var>addedCount</var>, the following steps are taken:</p>
+    <emu-alg><ol>
+  <li>Let <var>changeRecord</var> be the result of the abstraction operation ObjectCreate (15.2).</li>
+  <li>Call the [[DefineOwnProperty]] internal method of <var>changeRecord</var> with arguments <emu-val>''"type"''</emu-val>, Property Descriptor {[[Value]]: <code>"splice"</code>, [[Writable]]: <emu-val>false</emu-val>, [[Enumerable]]: <emu-val>true</emu-val>, [[Configurable]]: <emu-val>false</emu-val>}, and <emu-val>false</emu-val>.</li>
+  <li>Call the [[DefineOwnProperty]] internal method of <var>changeRecord</var> with arguments <emu-val>''"object"''</emu-val>, Property Descriptor {[[Value]]: <var>object</var>, [[Writable]]: <emu-val>false</emu-val>, [[Enumerable]]: <emu-val>true</emu-val>, [[Configurable]]: <emu-val>false</emu-val>}, and <emu-val>false</emu-val>.</li>
+  <li>Call the [[DefineOwnProperty]] internal method of <var>changeRecord</var> with arguments <emu-val>''"index"''</emu-val>, Property Descriptor {[[Value]]: <var>index</var>, [[Writable]]: <emu-val>false</emu-val>, [[Enumerable]]: <emu-val>true</emu-val>, [[Configurable]]: <emu-val>false</emu-val>}, and <emu-val>false</emu-val>.</li>
+  <li>Call the [[DefineOwnProperty]] internal method of <var>changeRecord</var> with arguments <emu-val>''"removed"''</emu-val>, Property Descriptor {[[Value]]: <var>removed</var>, [[Writable]]: <emu-val>false</emu-val>, [[Enumerable]]: <emu-val>true</emu-val>, [[Configurable]]: <emu-val>false</emu-val>}, and <emu-val>false</emu-val>.</li>
+  <li>Call the [[DefineOwnProperty]] internal method of <var>changeRecord</var> with arguments <emu-val>''"addedCount"''</emu-val>, Property Descriptor {[[Value]]: <var>addedCount</var>, [[Writable]]: <emu-val>false</emu-val>, [[Enumerable]]: <emu-val>true</emu-val>, [[Configurable]]: <emu-val>false</emu-val>}, and <emu-val>false</emu-val>.</li>
+  <li>Set the value of the [[Extensible]] internal slot of <var>changeRecord</var> to <emu-val>false</emu-val>.</li>
+  <li>Return <var>changeRecord</var>.</li>
+</ol></emu-alg>
+  </emu-clause>
+</emu-clause>
+
+<emu-clause id="public-api-specification">
+  <h1><span class="secnum">3</span>Public API Specification</h1>
+  <emu-clause id="Object.observe">
+    <h1><span class="secnum">3.1</span>Object.observe(O, callback, accept = undefined)</h1>
+    <p>When the <code>observe</code> method is called with arguments Object <var>O</var>, function <var>callback</var> and <var>accept</var> the following steps are taken:</p>
+    <emu-alg><ol>
+  <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-ecmascript-data-types-and-values">Type</a>(<var>O</var>) is not Objectttt, throw a <emu-val>TypeError</emu-val> exception.</li>
+  <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-iscallable">IsCallable</a>(<var>callback</var>) is <emu-val>false</emu-val>, throw a <emu-val>TypeError</emu-val> exception.</li>
+  <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-testintegritylevel">TestIntegrityLevel</a>(<var>callback</var>, <code>"frozen"</code>) is <emu-val>true</emu-val>, throw a <emu-val>TypeError</emu-val> exception.</li>
+  <li>If <var>accept</var> is <emu-val>undefined</emu-val>, then
+    <ol>
+      <li>Let <var>acceptList</var> be a new List containing <code>"add"</code>, <code>"update"</code>, <code>"delete"</code>, <code>"reconfigure"</code>, <code>"setPrototype"</code> and <code>"preventExtensions"</code>.</li>
+    </ol>
+  </li>
+  <li>Else
+    <ol>
+      <li>Let <var>acceptList</var> be a new List.</li>
+      <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-ecmascript-data-types-and-values">Type</a>(<var>accept</var>) is not Object, throw a <emu-val>TypeError</emu-val> exception.</li>
+      <li>Let <var>lenValue</var> be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(<var>accept</var>, <code>"length"</code>)</li>
+      <li>ReturnIfAbrubt(<var>lenValue</var>).</li>
+      <li>Let <var>len</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tolength">ToLength</a>(<var>lenValue</var>).</li>
+      <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(<var>len</var>).</li>
+      <li>Let <var>nextIndex</var> be 0.</li>
+      <li>While <var>nextIndex</var>
+        &lt; <var>len</var>, repeat
+          <ol>
+            <li>Let <var>next</var> be the result of <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-get-o-p">Get</a>(<var>accept</var>, <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(<var>nextIndex</var>)).</li>
+            <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(<var>next</var>).</li>
+            <li>Let <var>nextString</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-tostring">ToString</a>(<var>next</var>).</li>
+            <li><a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-returnifabrupt">ReturnIfAbrupt</a>(<var>nextString</var>).</li>
+            <li>Append <var>nextString</var> to <var>acceptList</var>.</li>
+            <li>Let <var>nextIndex</var> be <var>nextIndex</var> + 1.</li>
+          </ol>
+      </li>
+    </ol>
+  </li>
+  <li>Let <var>notifier</var> be <a href="#GetNotifier">GetNotifier</a>(<var>O</var>).</li>
+  <li>Let <var>changeObservers</var> be the value of <var>notifier</var>`s [[ChangeObservers]] internal slot.</li>
+  <li>If <var>changeObservers</var> already contains a <var>record</var> whose <var>callback</var> property is the same as <var>callback</var>, then
+    <ol>
+      <li>Call <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-createdataproperty">CreateDataProperty</a>(<var>record</var>, <code>"accept"</code>, <var>acceptList</var>).</li>
+      <li>Return <var>O</var>.</li>
+    </ol>
+  </li>
+  <li>Let <var>observerRecord</var> be <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-objectcreate">ObjectCreate</a>(%ObjectPrototype%).</li>
+  <li>Perform <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-createdataproperty">CreateDataProperty</a>(<var>observerRecord</var>, <code>"callback"</code>, <var>callback</var>).</li>
+  <li>Perform <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-createdataproperty">CreateDataProperty</a>(<var>observerRecord</var>, <code>"accept"</code>, <var>acceptList</var>).</li>
+  <li>Append <var>observerRecord</var> to the end of the <var>changeObservers</var> list.</li>
+  <li>Let <var>observerCallbacks</var> be [[ObserverCallbacks]].</li>
+  <li>If <var>observerCallbacks</var> already contains <var>callback</var>, return <var>O</var>.</li>
+  <li>Append <var>callback</var> to the end of the <var>observerCallbacks</var> list.</li>
+  <li>Return <var>O</var>.</li>
+</ol></emu-alg>
+  </emu-clause>
+  <emu-clause id="Object.unobserve">
+    <h1><span class="secnum">3.2</span>Object.unobserve(O, callback)</h1>
+
+    <p>When the <code>unobserve</code> method is called with arguments Object <var>O</var> and function <var>callback</var> the following steps are taken:</p>
+    <emu-alg><ol>
+  <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-ecmascript-data-types-and-values">Type</a>(<var>O</var>) is not Object, throw a <emu-val>TypeError</emu-val> exception.</li>
+  <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-iscallable">IsCallable</a>(<var>callback</var>) is <emu-val>false</emu-val>, throw a <emu-val>TypeError</emu-val> exception.</li>
+  <li>Let <var>notifier</var> be <a href="#GetNotifier">GetNotifier</a>(<var>O</var>).</li>
+  <li>Let <var>changeObservers</var> be the value of <var>notifier</var>'s [[ChangeObservers]] internal slot.</li>
+  <li>If <var>changeObservers</var> does not contain a record whose <var>callback</var> property is the same as <var>callback</var>, return <var>O</var>.</li>
+  <li>Remove the record whose <var>callback</var> property is the same as <var>callback</var> from the <var>changeObservers</var> list.</li>
+  <li>Return <var>O</var>.</li>
+</ol></emu-alg>
+  </emu-clause>
+  <emu-clause id="Array.observe">
+    <h1><span class="secnum">3.3</span>Array.observe</h1>
+
+    <p>A new function Array.observe(O, callback) is added, which is equivalent to</p>
+
+    <pre>function(O, callback) {
+  return Object.observe(O, callback, ["add", "update", "delete", "splice"]);
+}
+    </pre>
+  </emu-clause>
+  
+  <emu-clause id="Array.unobserve">
+    <h1><span class="secnum">3.4</span>Array.unobserve</h1>
+
+    <p>A new function Array.unobserve(o, callback) is added, which is equivalent to</p>
+
+    <pre>function(O, callback) {
+  return Object.unobserve(O, callback);
+}
+    </pre>
+  </emu-clause>
+
+  <emu-clause id="Object.deliverChangeRecords">
+    <h1><span class="secnum">3.5</span>Object.deliverChangeRecords</h1>
+
+    <p>When the <code>deliverChangeRecords</code> method is called with argument <var>callback</var>, the following steps are taken:</p>
+    <emu-alg><ol>
+  <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-iscallable">IsCallable</a>(<var>callback</var>) is <emu-val>false</emu-val>, throw a <emu-val>TypeError</emu-val> exception.</li>
+  <li>Repeat
+    <ol>
+      <li>Let <var>result</var> be <a href="#DeliverChangeRecords">DeliverChangeRecords</a>(<var>callback</var>).</li>
+      <li>If <var>result</var> is <emu-val>false</emu-val> return.</li>
+    </ol>
+  </li>
+</ol></emu-alg>
+  </emu-clause>
+
+  <emu-clause id="Object.getNotifier">
+    <h1><span class="secnum">3.6</span>Object.getNotifier</h1>
+
+    <p>When the <code>getNotifier</code> method is called with argument <var>O</var>, the following steps are taken:</p>
+
+    <emu-alg><ol>
+  <li>If <a href="https://people.mozilla.org/~jorendorff/es6-draft.html#sec-ecmascript-data-types-and-values">Type</a>(<var>O</var>) is not Object, throw a <emu-val>TypeError</emu-val> exception.</li>
+  <li>If <var>O</var> is frozen, return <emu-val>null</emu-val>.</li>
+  <li>Return the result of <a href="#GetNotifier">GetNotifier</a>(<var>O</var>).</li>
+</ol></emu-alg>
+  </emu-clause>
+</emu-clause>
+
+
+<emu-annex id="updates">
+  <h1><span class="secnum">A</span>Updates</h1>
+  <pre style="white-space: pre-wrap">11/14/2013:
+  - Re-organized structure.
+  - Added "Key Algorithms and Semantics" section.
+  - Added "Cross-cutting Concerns and Potential Implementation Challenges"
+11/13/2013:
+  - Fixed a bunch of editorial issues discovered by Joshua Bell.
+  - Rebase spec changes against Rev21 ES6 Draft
+10/29/2013:
+  - notifier.performChange now emits a change record if the return value of the changeFn is an object (feedback from Sept TC-39)
+  - "intrinsic" change record types renamed for consistency. "new" -&gt; "add", "updated" -&gt; "update", "deleted" -&gt; "delete", "reconfigured" -&gt; "reconfigure", "prototype" -&gt; "setPrototype" (feedback from Sept TC-39)
+  - "preventExtensions" changeRecord type is now emitted when the first time an object's `[[Extensible]]` internal property is set to false.
+9/12/2013:
+  - Object.observe accept arg can be zero-length (now specifies that accept.length must be &gt; 0).
+7/20/2013:
+  - Notifier.performChange, Array.observe &amp; some refactoring of algorithms.
+1/30/2013:
+  - Suppress oldValue when the changeRecord is of type 'reconfigured' and the oldValue and present value are the same. Note that CreateChangeRecord now takes both oldDesc and newDesc as arguments.
+12/21/2012:
+  - Object.deliverChangeRecords now calls `[[DeliverChangeRecords]]` repeatedly until there no pending records to deliver.
+11/19/2012:
+  - Object.observer/unobserve now return the object (for consistency with Object.freeze, etc...).
+11/13/2012:
+  - In Object.unobserve, passing a non-function as the callback now throws (for symmetry with Object.observe).
+
+10/28/2012:
+  - In CreateChangeRecord, renamed fourth argument to "oldDesc" (from "desc") for clarity.
+  - In CreateChangeRecord, shallow freeze created changeRecord (consistent with Notifier.prototype.notify).
+
+10/23/2012:
+  - In notify, moved the check for type not being a string above the check for empty observers so the error will throw regardless of if there are observers.
+  - Change the spec language of notify to make it clear to return before creating the changeRecord if there are no observers.
+
+9/11/2012:
+  - Added a section that we need to schedule a `{type: "prototype", object: ..., oldValue: ...}` change record when the `[[Prototype]]` internal property is changed.
+
+7/18/2012:
+  - Only fire **`"updated"`** changes when value changes (using SameValue) and no other configuration change happens.
+
+7/17/2012: Based on feedback from Mark Miller, Tom van Cutsem and Andreas Rossberg:
+  - _anyWorkDone_ should be or'ed with the previous value.
+  - Refactored into `[[GetNotifier]]` to ensure it is always initialized.
+  - **`"descriptor"`** is now always **`"reconfigured"`**
+  - Enforce that _changeRecord_ is frozen in `[[NotifierPrototype]]`.notify.
+  - Never pass a descriptor in the change record. Only include oldValue if it was a data property before the change.
+  - Remove redundant IsCallable check in unobserve.
+  - Ensure that _O_ is an object in Object.getNotifier.
+  
+
+7/4/2012: Per security feedback from Mark Miller
+  - Object.getNotifier() of frozen object, returns null.
+  - Object `[[Notifier]]` is spec'd to be lazily created to avoid infinite regress.
+  - All changeRecords are shallowly frozen, and "reconfigured" changeRecords have their oldValue (property descriptor) frozen.
+  - Validate **`"object"`** field of _changeRecord_ for _notifyFunction_ so as to ensure that notifier of an object can only broadcast changes of its `[[Target]]`.
+  - Validate **`"type"`** and **`"name"`** fields of _changeRecord_ for _notifyFunction_ and perform a shallow freeze to prevent unintentional delivery of shared mutable state.
+  - Object.retrieveChangeRecords -&gt; Object.deliverChangeRecords (invoke the function rather than return records).
+  - Object callbacks invokations silently ignore all thrown exceptions and return values.
+  - Frozen callback function objects cannot be registered as change observers (Object.observe) throws TypeError.
+
+7/2/2012:
+  - Remove changeRecord validation. Since there is no way to validate "oldValue", arbitrary data can always be passed.
+  - Added Object.getNotifier(obj).notify(changeRecord) separation, so as to allow freezing of an object to prevent side-channel, but retaining the ability to notify if getNotifier() was called prior to freezing.
+
+5/17/2012:
+  - Call the callbacks with a ChangeRecord object describing the change.
+  - Add sanity checks in `[[ToChangeRecord]]` which is used in `Object.notifyObservers`.
+  - Add `Object.retrieveChangeRecords` which allows synchronous access to the pending changes.
+
+3/16/2012:  Two requests from feedback from Rafael Weinstein and Erik Arvidsson:
+  - Pass old property values as well as new to `[[FireChangeListeners]]`
+  - Schedule change events to be delivered asynchronously "at the end of the turn"   
+  </pre>
+</emu-annex>
+
+
+<!--
+
+[New internals specification](NewInternalsSpecification.md)
+
+## New Public API
+
+[Public API Specification](PublicApiSpecification.md)
+
+
+
+## Modifications to Existing Internal Algorithms
+
+[Changes to the existing specification](ChangesToTheExistingSpecification.md)
+-->
+</body>
