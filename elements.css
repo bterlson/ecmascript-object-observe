@@ -196,3 +196,14 @@ table.lightweight-table td, table.lightweight-table th {
     padding: 0 0.5em;
     vertical-align: baseline;
 }
+
+/* diff styles */
+ins {
+    background-color: #efe;
+    text-decoration: none;
+    border-bottom: 1px solid #060;
+}
+
+del {
+    background-color: #fee;
+}
