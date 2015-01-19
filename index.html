@@ -1,7 +1,8 @@
 <!doctype html>
-<head><meta charset="utf8">
+<head><meta charset="utf-8">
 <title>Object.observe</title>
-<link rel="stylesheet" href="https://bterlson.github.io/ecmarkup/elements.css">
+<link rel="stylesheet" href="https://bterlson.github.com/ecmarkup/elements.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/8.4/styles/github.min.css">
 </head><body><h1>Object.Observe</h1>
 <div><h2>Table of Contents</h2><ol class="toc"><li><a href="#intro"><span class="secnum"></span> Introduction</a><ol class="toc"><li><a href="#problem"><span class="secnum"></span> Problem</a></li><li><a href="#goals"><span class="secnum"></span> Goals</a></li><li><a href="#solution"><span class="secnum"></span> Solution</a></li><li><a href="#concerns"><span class="secnum"></span> Cross-cutting Concerns and Potential Implementation Challenges</a></li></ol></li><li><a href="#examples"><span class="secnum"></span> Examples</a><ol class="toc"><li><a href="#examples-basic"><span class="secnum"></span> Basic</a></li><li><a href="#examples-array"><span class="secnum"></span> Array</a></li><li><a href="#examples-synthetic"><span class="secnum"></span> Synthetic Change Records</a></li><li><a href="#examples-higher-synthetic"><span class="secnum"></span> Higher-level Change Records</a></li></ol></li><li><a href="#key-algorithms-and-semantics"><span class="secnum">1</span> Key Algorithms and Semantics</a><ol class="toc"><li><a href="#ChangeObserver-and-PendingChangeRecords"><span class="secnum">1.1</span> ChangeObserver and PendingChangeRecords</a></li><li><a href="#observable-changes-to-objects"><span class="secnum">1.2</span> Observable changes to objects</a></li><li><a href="#the-notifier-object"><span class="secnum">1.3</span> The Notifier Object</a></li><li><a href="#accepted-change-types"><span class="secnum">1.4</span> Accepted Change Types</a></li><li><a href="#ActiveChanges"><span class="secnum">1.5</span> ActiveChanges and higher-level change types</a></li><li><a href="#enqueuing-changes-to-observers"><span class="secnum">1.6</span> Enqueuing changes to observers</a></li><li><a href="#end-of-turn-delivery-of-change-records"><span class="secnum">1.7</span> End of turn delivery of change records</a></li></ol></li><li><a href="#new-internal-properties"><span class="secnum">2</span> New Internal Properties, Objects and Algorithms</a><ol class="toc"><li><a href="#observercallbacks"><span class="secnum">2.1</span> [[ObserverCallbacks]]</a></li><li><a href="#pendingchangerecords"><span class="secnum">2.2</span> [[PendingChangeRecords]]</a></li><li><a href="#notifier"><span class="secnum">2.3</span> [[Notifier]]</a></li><li><a href="#notifierobjects"><span class="secnum">2.4</span> Notifier Objects</a><ol class="toc"><li><a href="#notifierprototype"><span class="secnum">2.4.1</span> Properties of the Notifier Prototype</a><ol class="toc"><li><a href="#notifierprototype._notify"><span class="secnum">2.4.1.1</span> %NotifierPrototype%.notify(changeRecord)</a></li><li><a href="#notifierprototype_.performchange"><span class="secnum">2.4.1.2</span> %NotifierPrototype%.performChange(changeType, changeFn)</a></li></ol></li></ol></li><li><a href="#GetNotifier"><span class="secnum">2.5</span> GetNotifier(O)</a></li><li><a href="#BeginChange"><span class="secnum">2.6</span> BeginChange(O, changeType)</a></li><li><a href="#EndChange"><span class="secnum">2.7</span> EndChange(O, changeType)</a></li><li><a href="#ShouldDeliverToObserver"><span class="secnum">2.8</span> ShouldDeliverToObserver(activeChanges, acceptList, changeType)</a></li><li><a href="#EnqueueChangeRecord"><span class="secnum">2.9</span> EnqueueChangeRecord(O, changeRecord)</a></li><li><a href="#DeliverChangeRecords"><span class="secnum">2.10</span> DeliverChangeRecords(C)</a></li><li><a href="#DeliverAllChangeRecords"><span class="secnum">2.11</span> [[DeliverAllChangeRecords]]</a></li><li><a href="#CreateChangeRecord"><span class="secnum">2.12</span> CreateChangeRecord(type, object, name, oldDesc, newDesc)</a></li><li><a href="#CreateSpliceChangeRecord"><span class="secnum">2.13</span> [[CreateSpliceChangeRecord]]</a></li></ol></li><li><a href="#public-api-specification"><span class="secnum">3</span> Public API Specification</a><ol class="toc"><li><a href="#Object.observe"><span class="secnum">3.1</span> Object.observe(O, callback, accept = undefined)</a></li><li><a href="#Object.unobserve"><span class="secnum">3.2</span> Object.unobserve(O, callback)</a></li><li><a href="#Array.observe"><span class="secnum">3.3</span> Array.observe</a></li><li><a href="#Array.unobserve"><span class="secnum">3.4</span> Array.unobserve</a></li><li><a href="#Object.deliverChangeRecords"><span class="secnum">3.5</span> Object.deliverChangeRecords</a></li><li><a href="#Object.getNotifier"><span class="secnum">3.6</span> Object.getNotifier</a></li></ol></li><li><a href="#modifications"><span class="secnum">4</span> Modifications to existing internal algorithms</a><ol class="toc"><li><a href="#ValidateAndApplyPropertyDescriptor"><span class="secnum">4.1</span> 9.1.6.3 ValidateAndApplyPropertyDescriptor(O, P, extensible, Desc, current)</a></li><li><a href="#Delete"><span class="secnum">4.2</span> 9.1.10 [[Delete]] (P)</a></li><li><a href="#PreventExtensions"><span class="secnum">4.3</span> 9.1.4 [[PreventExtensions]] ()</a></li><li><a href="#SetPrototypeOf"><span class="secnum">4.4</span> 9.1.2 `[[SetPrototypeOf]] (V)`</a></li><li><a href="#Array-changes"><span class="secnum">4.5</span> Changes to Array methods</a><ol class="toc"><li><a href="#Array.prototype.pop"><span class="secnum">4.5.1</span> Array.prototype.pop</a></li><li><a href="#Array.prototype.push"><span class="secnum">4.5.2</span> Array.prototype.push</a></li><li><a href="#Array.prototype.shift"><span class="secnum">4.5.3</span> Array.prototype.shift</a></li><li><a href="#Array.prototype.splice"><span class="secnum">4.5.4</span> Array.prototype.splice</a></li><li><a href="#Array.prototype.unshift"><span class="secnum">4.5.5</span> Array.prototype.unshift</a></li></ol></li><li><a href="#Array-instance-changes"><span class="secnum">4.6</span> Array Exotic Objects</a><ol class="toc"><li><a href="#DefineOwnProperty"><span class="secnum">4.6.1</span> [[DefineOwnProperty]] (P, Desc)</a></li><li><a href="#ArraySetLength"><span class="secnum">4.6.2</span> ArraySetLength Abstract Operation</a></li></ol></li></ol></li><li><a href="#updates"><span class="secnum">A</span> Updates</a></li></ol></div><emu-intro id="intro">
   <h1><span class="secnum"></span>Introduction</h1>
@@ -70,176 +71,180 @@
 
   <emu-intro id="examples-basic">
     <h1><span class="secnum"></span>Basic</h1>
-    <pre>var records;
-function observer(recs) {
+    <pre><code class="language-javascript hljs">
+<span class="hljs-keyword">var</span> records;
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">observer</span><span class="hljs-params">(recs)</span> </span>{
   records = recs;
 }
 
-var obj = { id: 1 };
-Object.observe(obj, observer);
+<span class="hljs-keyword">var</span> obj = { id: <span class="hljs-number">1</span> };
+<span class="hljs-built_in">Object</span>.observe(obj, observer);
 
-obj.a = 'b';
+obj.a = <span class="hljs-string">'b'</span>;
 obj.id++;
-Object.defineProperty(obj, 'a', { enumerable: false });
-delete obj.a;
-Object.preventExtensions(obj);
+<span class="hljs-built_in">Object</span>.defineProperty(obj, <span class="hljs-string">'a'</span>, { enumerable: <span class="hljs-literal">false</span> });
+<span class="hljs-keyword">delete</span> obj.a;
+<span class="hljs-built_in">Object</span>.preventExtensions(obj);
 
-Object.deliverChangeRecords(observer);
+<span class="hljs-built_in">Object</span>.deliverChangeRecords(observer);
 assertChangesAre(records, [
-  { object: obj, type: 'add', name: 'a' },
-  { object: obj, type: 'update', name: 'id', oldValue: 1 },
-  { object: obj, type: 'reconfigure', name: 'a' },
-  { object: obj, type: 'delete', name: 'a', oldValue: 'b' },
-  { object: obj, type: 'preventExtensions', }
+  { object: obj, type: <span class="hljs-string">'add'</span>, name: <span class="hljs-string">'a'</span> },
+  { object: obj, type: <span class="hljs-string">'update'</span>, name: <span class="hljs-string">'id'</span>, oldValue: <span class="hljs-number">1</span> },
+  { object: obj, type: <span class="hljs-string">'reconfigure'</span>, name: <span class="hljs-string">'a'</span> },
+  { object: obj, type: <span class="hljs-string">'delete'</span>, name: <span class="hljs-string">'a'</span>, oldValue: <span class="hljs-string">'b'</span> },
+  { object: obj, type: <span class="hljs-string">'preventExtensions'</span>, }
 ]);
-    </pre>
+    </code></pre>
   </emu-intro>
 
   <emu-intro id="examples-array">
     <h1><span class="secnum"></span>Array</h1>
-    <pre>var basicChanges;
-function basicObserver(recs) {
+    <pre><code class="language-javascript hljs">
+<span class="hljs-keyword">var</span> basicChanges;
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">basicObserver</span><span class="hljs-params">(recs)</span> </span>{
   basicChanges = recs;
 }
 
-var arrayChanges;
-function arrayObserver(recs) {
+<span class="hljs-keyword">var</span> arrayChanges;
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">arrayObserver</span><span class="hljs-params">(recs)</span> </span>{
   arrayChanges = recs;
 }
 
-var array = [1, 2, 3];
-Object.observe(array, basicObserver);
-Array.observe(array, arrayObserver);
+<span class="hljs-keyword">var</span> array = [<span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>];
+<span class="hljs-built_in">Object</span>.observe(array, basicObserver);
+<span class="hljs-built_in">Array</span>.observe(array, arrayObserver);
 
-array.push(4);
-array.splice(2, 2);
-array[5] = 'a';
-array.length = 0;
+array.push(<span class="hljs-number">4</span>);
+array.splice(<span class="hljs-number">2</span>, <span class="hljs-number">2</span>);
+array[<span class="hljs-number">5</span>] = <span class="hljs-string">'a'</span>;
+array.length = <span class="hljs-number">0</span>;
 
-Object.deliverChangeRecords(basicObserver);
+<span class="hljs-built_in">Object</span>.deliverChangeRecords(basicObserver);
 assertChangesAre(basicChanges, [
-  // push
-  { object: array, type: 'add', name: '3' },
-  { object: array, type: 'update', name: 'length', oldValue: 3 },
-  // splice
-  { object: array, type: 'delete', name: '3', oldValue: 4 },
-  { object: array, type: 'delete', name: '2', oldValue: 3 },
-  { object: array, type: 'update', name: 'length', oldValue: 4 },
-  // index assignment
-  { object: array, type: 'add', name: '5' },
-  { object: array, type: 'update', name: 'length', oldValue: 2 },
-  // length assignment
-  { object: array, type: 'delete', name: '5', oldValue: 'a' },
-  { object: array, type: 'delete', name: '1', oldValue: 2 },
-  { object: array, type: 'delete', name: '0', oldValue: 1 },
-  { object: array, type: 'update', name: 'length', oldValue: 6 },
+  <span class="hljs-comment">// push</span>
+  { object: array, type: <span class="hljs-string">'add'</span>, name: <span class="hljs-string">'3'</span> },
+  { object: array, type: <span class="hljs-string">'update'</span>, name: <span class="hljs-string">'length'</span>, oldValue: <span class="hljs-number">3</span> },
+  <span class="hljs-comment">// splice</span>
+  { object: array, type: <span class="hljs-string">'delete'</span>, name: <span class="hljs-string">'3'</span>, oldValue: <span class="hljs-number">4</span> },
+  { object: array, type: <span class="hljs-string">'delete'</span>, name: <span class="hljs-string">'2'</span>, oldValue: <span class="hljs-number">3</span> },
+  { object: array, type: <span class="hljs-string">'update'</span>, name: <span class="hljs-string">'length'</span>, oldValue: <span class="hljs-number">4</span> },
+  <span class="hljs-comment">// index assignment</span>
+  { object: array, type: <span class="hljs-string">'add'</span>, name: <span class="hljs-string">'5'</span> },
+  { object: array, type: <span class="hljs-string">'update'</span>, name: <span class="hljs-string">'length'</span>, oldValue: <span class="hljs-number">2</span> },
+  <span class="hljs-comment">// length assignment</span>
+  { object: array, type: <span class="hljs-string">'delete'</span>, name: <span class="hljs-string">'5'</span>, oldValue: <span class="hljs-string">'a'</span> },
+  { object: array, type: <span class="hljs-string">'delete'</span>, name: <span class="hljs-string">'1'</span>, oldValue: <span class="hljs-number">2</span> },
+  { object: array, type: <span class="hljs-string">'delete'</span>, name: <span class="hljs-string">'0'</span>, oldValue: <span class="hljs-number">1</span> },
+  { object: array, type: <span class="hljs-string">'update'</span>, name: <span class="hljs-string">'length'</span>, oldValue: <span class="hljs-number">6</span> },
 ]);
 
-Object.deliverChangeRecords(arrayObserver);
+<span class="hljs-built_in">Object</span>.deliverChangeRecords(arrayObserver);
 assertChangesAre(arrayChanges, [
-  // push
-  { object: array, type: 'splice', index: 3, removed: [], addedCount: 1 },
-  // splice
-  { object: array, type: 'splice', index: 2, removed: [3, 4], addedCount: 0 },
-  // index assignment
-  { object: array, type: 'splice', index: 2, removed: [], addedCount: 4 },
-  // length assignment
-  { object: array, type: 'splice', index: 0, removed: [1, 2,,,,'a'], addedCount: 0 },
+  <span class="hljs-comment">// push</span>
+  { object: array, type: <span class="hljs-string">'splice'</span>, index: <span class="hljs-number">3</span>, removed: [], addedCount: <span class="hljs-number">1</span> },
+  <span class="hljs-comment">// splice</span>
+  { object: array, type: <span class="hljs-string">'splice'</span>, index: <span class="hljs-number">2</span>, removed: [<span class="hljs-number">3</span>, <span class="hljs-number">4</span>], addedCount: <span class="hljs-number">0</span> },
+  <span class="hljs-comment">// index assignment</span>
+  { object: array, type: <span class="hljs-string">'splice'</span>, index: <span class="hljs-number">2</span>, removed: [], addedCount: <span class="hljs-number">4</span> },
+  <span class="hljs-comment">// length assignment</span>
+  { object: array, type: <span class="hljs-string">'splice'</span>, index: <span class="hljs-number">0</span>, removed: [<span class="hljs-number">1</span>, <span class="hljs-number">2</span>,,,,<span class="hljs-string">'a'</span>], addedCount: <span class="hljs-number">0</span> },
 ]);
-    </pre>
+    </code></pre>
   </emu-intro>
 
   <emu-intro id="examples-synthetic">
     <h1><span class="secnum"></span>Synthetic Change Records</h1>
-    <pre>function Circle(r) {
-  var radius = r;
+    <pre><code class="language-javascript hljs">
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">Circle</span><span class="hljs-params">(r)</span> </span>{
+  <span class="hljs-keyword">var</span> radius = r;
 
-  var notifier = Object.getNotifier(this);
-  function notifyAreaAndRadius(radius) {
+  <span class="hljs-keyword">var</span> notifier = <span class="hljs-built_in">Object</span>.getNotifier(<span class="hljs-keyword">this</span>);
+  <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">notifyAreaAndRadius</span><span class="hljs-params">(radius)</span> </span>{
     notifier.notify({
-      type: 'update',
-      name: 'radius',
+      type: <span class="hljs-string">'update'</span>,
+      name: <span class="hljs-string">'radius'</span>,
       oldValue: radius
     })
     notifier.notify({
-      type: 'update',
-      name: 'area',
-      oldValue: Math.pow(radius * Math.PI, 2)
+      type: <span class="hljs-string">'update'</span>,
+      name: <span class="hljs-string">'area'</span>,
+      oldValue: <span class="hljs-built_in">Math</span>.pow(radius * <span class="hljs-built_in">Math</span>.PI, <span class="hljs-number">2</span>)
     });
   }
 
-  Object.defineProperty(this, 'radius', {
-    get: function() {
-      return radius;
+  <span class="hljs-built_in">Object</span>.defineProperty(<span class="hljs-keyword">this</span>, <span class="hljs-string">'radius'</span>, {
+    get: <span class="hljs-function"><span class="hljs-keyword">function</span><span class="hljs-params">()</span> </span>{
+      <span class="hljs-keyword">return</span> radius;
     },
-    set: function(r) {
-      if (radius === r)
-        return;
+    set: <span class="hljs-function"><span class="hljs-keyword">function</span><span class="hljs-params">(r)</span> </span>{
+      <span class="hljs-keyword">if</span> (radius === r)
+        <span class="hljs-keyword">return</span>;
       notifyAreaAndRadius(radius);
       radius = r;
     }
   });
 
-  Object.defineProperty(this, 'area', {
-    get: function() {
-      return Math.power(radius * Math.PI, 2);
+  <span class="hljs-built_in">Object</span>.defineProperty(<span class="hljs-keyword">this</span>, <span class="hljs-string">'area'</span>, {
+    get: <span class="hljs-function"><span class="hljs-keyword">function</span><span class="hljs-params">()</span> </span>{
+      <span class="hljs-keyword">return</span> <span class="hljs-built_in">Math</span>.power(radius * <span class="hljs-built_in">Math</span>.PI, <span class="hljs-number">2</span>);
     },
-    set: function(a) {
-      r = Math.sqrt(a)/Math.PI;
+    set: <span class="hljs-function"><span class="hljs-keyword">function</span><span class="hljs-params">(a)</span> </span>{
+      r = <span class="hljs-built_in">Math</span>.sqrt(a)/<span class="hljs-built_in">Math</span>.PI;
       notifyAreaAndRadius(radius);
       radius = r;
     }
   });
 }
 
-var changes;
-function observer(recs) {
+<span class="hljs-keyword">var</span> changes;
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">observer</span><span class="hljs-params">(recs)</span> </span>{
   changes = recs;
 }
 
-var circle = new Circle(5);
+<span class="hljs-keyword">var</span> circle = <span class="hljs-keyword">new</span> Circle(<span class="hljs-number">5</span>);
 
-Object.observe(circle, observer);
+<span class="hljs-built_in">Object</span>.observe(circle, observer);
 
-circle.radius = 10;
-circle.area = 100;
+circle.radius = <span class="hljs-number">10</span>;
+circle.area = <span class="hljs-number">100</span>;
 
-Object.deliverChangeRecords(observer);
+<span class="hljs-built_in">Object</span>.deliverChangeRecords(observer);
 assertChangesAre(changes, [
-  // 'radius' assignment
-  { object: circle, type: 'update', name: 'radius', oldValue: 5 },
-  { object: circle, type: 'update', name: 'area', oldValue: 246.74011002723395 },
-  // 'area' assignment
-  { object: circle, type: 'update', name: 'radius', oldValue: 10 },
-  { object: circle, type: 'update', name: 'area', oldValue: 986.9604401089358 },
+  <span class="hljs-comment">// 'radius' assignment</span>
+  { object: circle, type: <span class="hljs-string">'update'</span>, name: <span class="hljs-string">'radius'</span>, oldValue: <span class="hljs-number">5</span> },
+  { object: circle, type: <span class="hljs-string">'update'</span>, name: <span class="hljs-string">'area'</span>, oldValue: <span class="hljs-number">246.74011002723395</span> },
+  <span class="hljs-comment">// 'area' assignment</span>
+  { object: circle, type: <span class="hljs-string">'update'</span>, name: <span class="hljs-string">'radius'</span>, oldValue: <span class="hljs-number">10</span> },
+  { object: circle, type: <span class="hljs-string">'update'</span>, name: <span class="hljs-string">'area'</span>, oldValue: <span class="hljs-number">986.9604401089358</span> },
 ]);
-    </pre>
+    </code></pre>
   </emu-intro>
   <emu-intro id="examples-higher-synthetic">
     <h1><span class="secnum"></span>Higher-level Change Records</h1>
-    <pre>function Square(x, y, width, height) {
-  this.x = x;
-  this.y = y;
-  this.width = width;
-  this.height = height;
+    <pre><code class="language-javascript hljs">
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">Square</span><span class="hljs-params">(x, y, width, height)</span> </span>{
+  <span class="hljs-keyword">this</span>.x = x;
+  <span class="hljs-keyword">this</span>.y = y;
+  <span class="hljs-keyword">this</span>.width = width;
+  <span class="hljs-keyword">this</span>.height = height;
 }
 
 Square.prototype = {
-  scale: function(ratio) {
-    Object.getNotifier(this).performChange('scale', () =&gt; {
-      this.width *= ratio;
-      this.height *= ratio;
-      return {
+  scale: <span class="hljs-function"><span class="hljs-keyword">function</span><span class="hljs-params">(ratio)</span> </span>{
+    <span class="hljs-built_in">Object</span>.getNotifier(<span class="hljs-keyword">this</span>).performChange(<span class="hljs-string">'scale'</span>, () =&gt; {
+      <span class="hljs-keyword">this</span>.width *= ratio;
+      <span class="hljs-keyword">this</span>.height *= ratio;
+      <span class="hljs-keyword">return</span> {
         ratio: ratio
       };
     });
   },
 
-  translate: function(dx, dy) {
-    Object.getNotifier(this).performChange('translate', () =&gt; {
-      this.x += dx;
-      this.y += dy;
-      return {
+  translate: <span class="hljs-function"><span class="hljs-keyword">function</span><span class="hljs-params">(dx, dy)</span> </span>{
+    <span class="hljs-built_in">Object</span>.getNotifier(<span class="hljs-keyword">this</span>).performChange(<span class="hljs-string">'translate'</span>, () =&gt; {
+      <span class="hljs-keyword">this</span>.x += dx;
+      <span class="hljs-keyword">this</span>.y += dy;
+      <span class="hljs-keyword">return</span> {
         dx: dx,
         dy: dy
       }
@@ -247,51 +252,51 @@ Square.prototype = {
   }
 }
 
-Square.observe = function(square, callback) {
-  return Object.observe(square, callback, ['update', 'translate', 'scale']);
+Square.observe = <span class="hljs-function"><span class="hljs-keyword">function</span><span class="hljs-params">(square, callback)</span> </span>{
+  <span class="hljs-keyword">return</span> <span class="hljs-built_in">Object</span>.observe(square, callback, [<span class="hljs-string">'update'</span>, <span class="hljs-string">'translate'</span>, <span class="hljs-string">'scale'</span>]);
 }
 
-var basicChanges;
-function basicObserver(recs) {
+<span class="hljs-keyword">var</span> basicChanges;
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">basicObserver</span><span class="hljs-params">(recs)</span> </span>{
   basicChanges = recs;
 }
 
-var squareChanges;
-function squareObserver(recs) {
+<span class="hljs-keyword">var</span> squareChanges;
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">squareObserver</span><span class="hljs-params">(recs)</span> </span>{
   squareChanges = recs;
 }
 
-var square = new Square(0, 0, 10, 10);
+<span class="hljs-keyword">var</span> square = <span class="hljs-keyword">new</span> Square(<span class="hljs-number">0</span>, <span class="hljs-number">0</span>, <span class="hljs-number">10</span>, <span class="hljs-number">10</span>);
 
-Object.observe(square, basicObserver);
+<span class="hljs-built_in">Object</span>.observe(square, basicObserver);
 Square.observe(square, squareObserver);
 
-square.translate(5, 5);
-square.x = -5;
-square.scale(2);
+square.translate(<span class="hljs-number">5</span>, <span class="hljs-number">5</span>);
+square.x = -<span class="hljs-number">5</span>;
+square.scale(<span class="hljs-number">2</span>);
 
-Object.deliverChangeRecords(basicObserver);
+<span class="hljs-built_in">Object</span>.deliverChangeRecords(basicObserver);
 assertChangesAre(basicChanges, [
-  // translate
-  { object: square, type: 'update', name: 'x', oldValue: 0 },
-  { object: square, type: 'update', name: 'y', oldValue: 0 },
-  // assignment to 'x'
-  { object: square, type: 'update', name: 'x', oldValue: 5 },
-  // scale
-  { object: square, type: 'update', name: 'width', oldValue: 10 },
-  { object: square, type: 'update', name: 'height', oldValue: 10 },
+  <span class="hljs-comment">// translate</span>
+  { object: square, type: <span class="hljs-string">'update'</span>, name: <span class="hljs-string">'x'</span>, oldValue: <span class="hljs-number">0</span> },
+  { object: square, type: <span class="hljs-string">'update'</span>, name: <span class="hljs-string">'y'</span>, oldValue: <span class="hljs-number">0</span> },
+  <span class="hljs-comment">// assignment to 'x'</span>
+  { object: square, type: <span class="hljs-string">'update'</span>, name: <span class="hljs-string">'x'</span>, oldValue: <span class="hljs-number">5</span> },
+  <span class="hljs-comment">// scale</span>
+  { object: square, type: <span class="hljs-string">'update'</span>, name: <span class="hljs-string">'width'</span>, oldValue: <span class="hljs-number">10</span> },
+  { object: square, type: <span class="hljs-string">'update'</span>, name: <span class="hljs-string">'height'</span>, oldValue: <span class="hljs-number">10</span> },
 ]);
 
-Object.deliverChangeRecords(squareObserver);
+<span class="hljs-built_in">Object</span>.deliverChangeRecords(squareObserver);
 assertChangesAre(squareChanges, [
-  // translate
-  { object: square, type: 'translate', dx: 5, dy: 5 },
-  // assignment to 'x'
-  { object: square, type: 'update', name: 'x', oldValue: 5 },
-  // scale
-  { object: square, type: 'scale', ratio: 2 },
+  <span class="hljs-comment">// translate</span>
+  { object: square, type: <span class="hljs-string">'translate'</span>, dx: <span class="hljs-number">5</span>, dy: <span class="hljs-number">5</span> },
+  <span class="hljs-comment">// assignment to 'x'</span>
+  { object: square, type: <span class="hljs-string">'update'</span>, name: <span class="hljs-string">'x'</span>, oldValue: <span class="hljs-number">5</span> },
+  <span class="hljs-comment">// scale</span>
+  { object: square, type: <span class="hljs-string">'scale'</span>, ratio: <span class="hljs-number">2</span> },
 ]);
-    </pre>
+    </code></pre>
   </emu-intro>
 </emu-intro>
 
@@ -473,7 +478,7 @@ assertChangesAre(squareChanges, [
       </emu-clause>
     </emu-clause>
   </emu-clause>
-  <emu-clause id="GetNotifier" aoid="GetNotifier">
+  <emu-clause id="GetNotifier" aoid="">
     <h1><span class="secnum">2.5</span>GetNotifier(O)</h1>
     <p>When the abstract operation GetNotifier is called with Object <var>O</var> the following steps are taken:</p>
     <emu-alg><ol>
@@ -491,7 +496,7 @@ assertChangesAre(squareChanges, [
 </ol></emu-alg>
   </emu-clause>
 
-  <emu-clause id="BeginChange" aoid="BeginChange">
+  <emu-clause id="BeginChange" aoid="">
     <h1><span class="secnum">2.6</span>BeginChange(O, changeType)</h1>
     <p>When the abstract operation BeginChange is called with Object <var>O</var> and string <var>changeType</var> the following steps are taken:</p>
     <emu-alg><ol>
@@ -508,7 +513,7 @@ assertChangesAre(squareChanges, [
 </ol></emu-alg>
   </emu-clause>
 
-  <emu-clause id="EndChange" aoid="EndChange">
+  <emu-clause id="EndChange" aoid="">
     <h1><span class="secnum">2.7</span>EndChange(O, changeType)</h1>
     <p>When the abstract operation EndChange is called with Object <var>O</var> and string <var>changeType</var> the following steps are taken:</p>
     <emu-alg><ol>
@@ -525,7 +530,7 @@ assertChangesAre(squareChanges, [
 </ol></emu-alg>
   </emu-clause>
 
-  <emu-clause id="ShouldDeliverToObserver" aoid="ShouldDeliverToObserver">
+  <emu-clause id="ShouldDeliverToObserver" aoid="">
     <h1><span class="secnum">2.8</span>ShouldDeliverToObserver(activeChanges, acceptList, changeType)</h1>
 
     <p>When the abstract operation ShouldDeliverToObserver is called with Object <var>activeChanges</var>, List <var>acceptList</var> and string <var>changeType</var> the following steps are taken:</p>
@@ -547,7 +552,7 @@ assertChangesAre(squareChanges, [
 </ol></emu-alg>
   </emu-clause>
 
-  <emu-clause id="EnqueueChangeRecord" aoid="EnqueueChangeRecord">
+  <emu-clause id="EnqueueChangeRecord" aoid="">
     <h1><span class="secnum">2.9</span>EnqueueChangeRecord(O, changeRecord)</h1>
 
     <p>When the abstract operation EnqueueChangeRecord is called with Object <var>O</var> and change record <var>changeRecord</var> the following steps are taken:</p>
@@ -574,7 +579,7 @@ assertChangesAre(squareChanges, [
   </emu-clause>
 
 
-  <emu-clause id="DeliverChangeRecords" aoid="DeliverChangeRecords">
+  <emu-clause id="DeliverChangeRecords" aoid="">
     <h1><span class="secnum">2.10</span>DeliverChangeRecords(C)</h1>
 
     <p>When the abstract operation DeliverChangeRecords is called with callback <var>C</var>, the following steps are taken:</p>
@@ -600,7 +605,7 @@ assertChangesAre(squareChanges, [
     <emu-note><span class="note">Note</span>The user facing function ''Object.deliverChangeRecords'' returns <emu-val>''undefined''</emu-val> to prevent detection if anything was delivered or not.</emu-note>
   </emu-clause>
 
-  <emu-clause id="DeliverAllChangeRecords" aoid="DeliverAllChangeRecords">
+  <emu-clause id="DeliverAllChangeRecords" aoid="">
     <h1><span class="secnum">2.11</span>[[DeliverAllChangeRecords]]</h1>
     <p>There is an abstract [[DeliverAllChangeRecords]] internal algorithm:</p>
 
@@ -622,7 +627,7 @@ assertChangesAre(squareChanges, [
     <emu-note><span class="note">Note</span>It is the intention that the embedder will call this internal algorithm when it is time to deliver the change records.</emu-note>
   </emu-clause>
 
-  <emu-clause id="CreateChangeRecord" aoid="CreateChangeRecord">
+  <emu-clause id="CreateChangeRecord" aoid="">
     <h1><span class="secnum">2.12</span>CreateChangeRecord(type, object, name, oldDesc, newDesc)</h1>
 
     <p>When the abstract operation CreateChangeRecord is called with string <var>type</var>, Object <var>object</var>, <var>name</var>, Object <var>oldDesc</var> and Object <var>newDesc</var> the following steps are taken:</p>
@@ -657,7 +662,7 @@ assertChangesAre(squareChanges, [
 </ol></emu-alg>
   </emu-clause>
 
-  <emu-clause id="CreateSpliceChangeRecord" aoid="CreateSpliceChangeRecord">
+  <emu-clause id="CreateSpliceChangeRecord" aoid="">
     <h1><span class="secnum">2.13</span>[[CreateSpliceChangeRecord]]</h1>
 
     <p>There is now an abstract operation [[CreateSpliceChangeRecord]]:</p>
@@ -1816,19 +1821,4 @@ assertChangesAre(squareChanges, [
   </pre>
 </emu-annex>
 
-
-<!--
-
-[New internals specification](NewInternalsSpecification.md)
-
-## New Public API
-
-[Public API Specification](PublicApiSpecification.md)
-
-
-
-## Modifications to Existing Internal Algorithms
-
-[Changes to the existing specification](ChangesToTheExistingSpecification.md)
--->
 </body>
